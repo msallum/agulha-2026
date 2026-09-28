@@ -6,6 +6,7 @@ live_needle_summary_latest.json
 needle_history_*.csv
 polling_schedule_log.csv
 timing_*.csv
+*.log
 Rplots.pdf
 .Rhistory
 .Rproj.user/
