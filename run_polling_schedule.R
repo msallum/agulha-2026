@@ -78,7 +78,11 @@ RSCRIPT_BIN <- "Rscript"
 LOG_PATH <- file.path(SCRIPT_DIR, "polling_schedule_log.csv")
 SUMMARY_JSON <- file.path(SCRIPT_DIR, "live_needle_summary_latest.json")
 
-POLLS_CLOSE_TIME <- as.POSIXct(Sys.getenv("POLLS_CLOSE_TIME", "2026-10-04 17:00:00"),
+# 17h05, not 17h00 sharp (2026-09-28, per Miguel): every tracker/script
+# watching this election is likely configured to start at the exact
+# stroke of 17h -- a deliberate 5-minute offset avoids piling onto TSE's
+# servers in that same first instant.
+POLLS_CLOSE_TIME <- as.POSIXct(Sys.getenv("POLLS_CLOSE_TIME", "2026-10-04 17:05:00"),
                                 tz = "America/Sao_Paulo")
 MAX_ITERATIONS <- as.numeric(Sys.getenv("MAX_ITERATIONS", Inf))
 
