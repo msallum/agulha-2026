@@ -1,0 +1,616 @@
+<title>Agulha 2026</title>
+<style>
+  :root {
+    --bg: #f4f2ec;
+    --panel: #ffffff;
+    --panel-2: #ebe8df;
+    --ink: #1c1a16;
+    --muted: #6b6558;
+    --hair: #ddd8cb;
+    --lula: #b8861f;
+    --bolsonaro: #2f6690;
+    --needle: #1c1a16;
+    --good: #2f7a4f;
+    --bad: #a5342a;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #15130f;
+      --panel: #1e1b15;
+      --panel-2: #262218;
+      --ink: #f2efe6;
+      --muted: #a39a86;
+      --hair: #3a3529;
+      --lula: #d9a53a;
+      --bolsonaro: #5b9bc9;
+      --needle: #f2efe6;
+      --good: #5fbd85;
+      --bad: #e2685c;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #15130f;
+    --panel: #1e1b15;
+    --panel-2: #262218;
+    --ink: #f2efe6;
+    --muted: #a39a86;
+    --hair: #3a3529;
+    --lula: #d9a53a;
+    --bolsonaro: #5b9bc9;
+    --needle: #f2efe6;
+    --good: #5fbd85;
+    --bad: #e2685c;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    padding-inline: 16px;
+    padding-block: 24px;
+    font-variant-numeric: tabular-nums;
+  }
+  .wrap { max-width: 960px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+
+  .masthead {
+    display: flex; align-items: baseline; justify-content: space-between;
+    flex-wrap: wrap; gap: 8px 16px;
+    border-bottom: 3px solid var(--ink);
+    padding-bottom: 12px;
+  }
+  .masthead h1 {
+    font-family: "Barlow Condensed", system-ui, sans-serif;
+    font-weight: 700;
+    font-size: clamp(28px, 6vw, 40px);
+    letter-spacing: 0.01em;
+    margin: 0;
+    text-wrap: balance;
+  }
+  .masthead .sub { color: var(--muted); font-size: 13px; }
+  .status-pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
+    padding: 4px 10px; border-radius: 999px;
+    border: 1px solid var(--hair);
+    color: var(--muted);
+  }
+  .status-pill .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+  .status-pill.live { color: var(--good); border-color: var(--good); }
+  .status-pill.live .dot { background: var(--good); box-shadow: 0 0 0 3px color-mix(in srgb, var(--good) 25%, transparent); }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--hair);
+    border-radius: 10px;
+    padding: 20px;
+  }
+
+  .hero {
+    display: grid;
+    grid-template-columns: minmax(220px, 320px) 1fr;
+    gap: 24px;
+    align-items: center;
+  }
+  @media (max-width: 640px) {
+    .hero { grid-template-columns: 1fr; }
+  }
+  .gauge-wrap { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .gauge-caption { font-size: 12px; color: var(--muted); text-align: center; max-width: 260px; }
+  #needleValue {
+    font-family: "Barlow Condensed", system-ui, sans-serif;
+    font-weight: 700;
+    font-size: 15px;
+    fill: var(--needle);
+  }
+  .readout { display: flex; flex-direction: column; gap: 14px; }
+  .readout-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .readout-label { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+  .swatch { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+  .readout-value { font-size: 22px; font-weight: 700; font-family: "Barlow Condensed", system-ui, sans-serif; }
+  .readout-value .unit { font-size: 13px; font-weight: 500; color: var(--muted); margin-left: 2px; }
+  .readout-sub { font-size: 12px; color: var(--muted); }
+
+  .stat-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  @media (max-width: 720px) { .stat-row { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 420px) { .stat-row { grid-template-columns: 1fr; } }
+  .stat-tile { padding: 14px 16px; }
+  .stat-tile .num { font-family: "Barlow Condensed", system-ui, sans-serif; font-size: 28px; font-weight: 700; line-height: 1; }
+  .stat-tile .lbl { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+  h2 {
+    font-family: "Barlow Condensed", system-ui, sans-serif;
+    font-size: 20px; font-weight: 700; letter-spacing: 0.01em;
+    margin: 0 0 4px 0;
+  }
+  .section-note { font-size: 12.5px; color: var(--muted); margin: 0 0 14px 0; max-width: 60ch; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--hair); }
+  th { color: var(--muted); font-weight: 600; font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.03em; }
+  td.num, th.num { text-align: right; }
+  .bar-cell { width: 40%; }
+  .bar-track { position: relative; height: 14px; background: var(--panel-2); border-radius: 3px; overflow: hidden; }
+  .bar-fill { position: absolute; top: 0; bottom: 0; left: 0; border-radius: 3px; }
+  .table-scroll { overflow-x: auto; }
+
+  footer {
+    font-size: 11.5px; color: var(--muted); text-align: center;
+    padding-top: 8px; border-top: 1px solid var(--hair);
+  }
+  footer a { color: inherit; }
+
+  .legend { display: flex; gap: 18px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+
+  .prob-block + .prob-block { margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--hair); }
+  .prob-header { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 7px; flex-wrap: wrap; }
+  .prob-label { font-weight: 700; color: var(--ink); text-transform: uppercase; font-size: 11.5px; letter-spacing: 0.04em; }
+  .prob-dispersion { font-size: 11px; padding: 2px 9px; border-radius: 999px; border: 1px solid var(--hair); color: var(--muted); white-space: nowrap; }
+  .prob-dispersion.high { color: var(--bad); border-color: var(--bad); }
+  .prob-dispersion.low { color: var(--good); border-color: var(--good); }
+  .prob-bar-track { display: flex; height: 24px; border-radius: 6px; overflow: hidden; background: var(--panel-2); }
+  .prob-bar-fill { height: 100%; transition: width 0.4s ease; }
+  .prob-bar-fill.lula { background: var(--lula); }
+  .prob-bar-fill.bolsonaro { background: var(--bolsonaro); }
+  .prob-readout { display: flex; justify-content: space-between; margin-top: 7px; font-family: "Barlow Condensed", system-ui, sans-serif; font-weight: 700; font-size: 16px; }
+  .prob-sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+  .history-chart-wrap { display: flex; flex-direction: column; gap: 4px; }
+  .history-chart-label { font-size: 11.5px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
+  .history-chart-wrap svg { width: 100%; height: 170px; display: block; }
+</style>
+
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+
+<div class="wrap">
+  <div class="masthead">
+    <div>
+      <h1>Agulha 2026</h1>
+      <div class="sub">Comparando o 1º turno com a mesma seção do eleitorado em 2022 e 2018</div>
+    </div>
+    <span class="status-pill" id="statusPill"><span class="dot"></span><span id="statusText">Aguardando 4 de outubro</span></span>
+  </div>
+
+  <div class="panel hero">
+    <div class="gauge-wrap">
+      <svg viewBox="0 0 240 150" width="100%" style="max-width:260px">
+        <defs>
+          <linearGradient id="gaugeGrad" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stop-color="var(--bolsonaro)"/>
+            <stop offset="50%" stop-color="var(--hair)"/>
+            <stop offset="100%" stop-color="var(--lula)"/>
+          </linearGradient>
+        </defs>
+        <path d="M 20 130 A 100 100 0 0 1 220 130" fill="none" stroke="url(#gaugeGrad)" stroke-width="16" stroke-linecap="round"/>
+        <g id="ticks" stroke="var(--muted)" stroke-width="1.5"></g>
+        <path id="ciBand" fill="var(--needle)" stroke="none" opacity="0"/>
+        <line id="needlePointer" x1="120" y1="130" x2="120" y2="42" stroke="var(--needle)" stroke-width="4" stroke-linecap="round"/>
+        <circle cx="120" cy="130" r="7" fill="var(--needle)"/>
+        <text id="needleValue" x="120" y="118" text-anchor="middle">—</text>
+        <text x="26" y="146" font-size="10" fill="var(--bolsonaro)" font-weight="700">BOLSONARO ↑</text>
+        <text x="214" y="146" font-size="10" fill="var(--lula)" font-weight="700" text-anchor="end">LULA ↑</text>
+      </svg>
+      <div class="gauge-caption">Projeção da margem nacional (Lula − Bolsonaro), extrapolando para os municípios ainda não apurados a variação observada nos que já apuraram (base: 2022). A faixa ao redor do ponteiro é o intervalo de confiança de 95%.</div>
+      <div class="gauge-caption" id="gaugeCiText" style="font-weight:600"></div>
+    </div>
+
+    <div class="readout">
+      <div class="readout-row">
+        <div class="readout-label"><span class="swatch" style="background:var(--lula)"></span>Lula (2026) vs. Lula 2022</div>
+        <div class="readout-value" id="rowLula2022">—<span class="unit">p.p.</span></div>
+      </div>
+      <div class="readout-row">
+        <div class="readout-label"><span class="swatch" style="background:var(--lula); opacity:.55"></span>Lula (2026) vs. Haddad 2018</div>
+        <div class="readout-value" id="rowLulaHaddad2018">—<span class="unit">p.p.</span></div>
+      </div>
+      <div class="readout-row">
+        <div class="readout-label"><span class="swatch" style="background:var(--bolsonaro)"></span>Bolsonaro (2026) vs. Jair 2022</div>
+        <div class="readout-value" id="rowBolso2022">—<span class="unit">p.p.</span></div>
+      </div>
+      <div class="readout-row">
+        <div class="readout-label"><span class="swatch" style="background:var(--bolsonaro); opacity:.55"></span>Bolsonaro (2026) vs. Jair 2018</div>
+        <div class="readout-value" id="rowBolso2018">—<span class="unit">p.p.</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="stat-row">
+    <div class="panel stat-tile">
+      <div class="num" id="statMun">0 <span style="font-size:16px;color:var(--muted)">/ 5.570</span></div>
+      <div class="lbl">municípios apurados</div>
+    </div>
+    <div class="panel stat-tile">
+      <div class="num" id="statPct">0%</div>
+      <div class="lbl">dos municípios apurados</div>
+    </div>
+    <div class="panel stat-tile">
+      <div class="num" id="statFracVotos">0%</div>
+      <div class="lbl">do total esperado de votos</div>
+    </div>
+    <div class="panel stat-tile">
+      <div class="num" id="statVotos">0</div>
+      <div class="lbl">votos válidos contados</div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Probabilidade — quem lidera ao final da apuração</h2>
+    <p class="section-note">
+      Projeção do resultado nacional: a variação média (ponderada por voto) observada nos municípios já apurados é
+      extrapolada para os municípios ainda não apurados. A incerteza cai conforme mais votos entram — e sobe se os
+      municípios já apurados estiverem variando de forma bem mais heterogênea do que o normal entre eleições, sinal de
+      que o histórico está sendo um guia menos confiável desta vez. Mostra apenas a disputa Lula × Bolsonaro-família;
+      não modela um resultado de 50%+1 no 1º turno nem o efeito de terceiros candidatos.
+    </p>
+
+    <div class="prob-block">
+      <div class="prob-header">
+        <span class="prob-label">vs. 2022 (base principal)</span>
+        <span class="prob-dispersion" id="dispersion2022"></span>
+      </div>
+      <div class="prob-bar-track">
+        <div class="prob-bar-fill lula" id="probBarLula2022" style="width:50%"></div>
+        <div class="prob-bar-fill bolsonaro" id="probBarBolsonaro2022" style="width:50%"></div>
+      </div>
+      <div class="prob-readout">
+        <span style="color:var(--lula)"><span id="probLula2022">—</span> Lula</span>
+        <span style="color:var(--bolsonaro)"><span id="probBolsonaro2022">—</span> Bolsonaro</span>
+      </div>
+      <div class="prob-sub" id="margin2022sub">Aguardando apuração.</div>
+      <div class="prob-sub" id="basis2022"></div>
+    </div>
+
+    <div class="prob-block">
+      <div class="prob-header">
+        <span class="prob-label">vs. 2018 (Haddad × Jair)</span>
+        <span class="prob-dispersion" id="dispersion2018"></span>
+      </div>
+      <div class="prob-bar-track">
+        <div class="prob-bar-fill lula" id="probBarLula2018" style="width:50%"></div>
+        <div class="prob-bar-fill bolsonaro" id="probBarBolsonaro2018" style="width:50%"></div>
+      </div>
+      <div class="prob-readout">
+        <span style="color:var(--lula)"><span id="probLula2018">—</span> Lula</span>
+        <span style="color:var(--bolsonaro)"><span id="probBolsonaro2018">—</span> Bolsonaro</span>
+      </div>
+      <div class="prob-sub" id="margin2018sub">Aguardando apuração.</div>
+      <div class="prob-sub" id="basis2018"></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Histórico — evolução da projeção</h2>
+    <p class="section-note">
+      Como a margem projetada e seu intervalo de confiança mudaram a cada nova apuração. A faixa deve se estreitar
+      conforme mais votos chegam; um salto ou uma inversão da linha aponta um momento em que a apuração mudou de
+      direção — vale conferir a região por trás disso.
+    </p>
+    <div class="history-chart-wrap">
+      <div class="history-chart-label">vs. 2022 (principal)</div>
+      <svg id="historyChart2022" width="100%" preserveAspectRatio="none"></svg>
+    </div>
+    <div class="history-chart-wrap" style="margin-top:14px">
+      <div class="history-chart-label">vs. 2018 (Haddad)</div>
+      <svg id="historyChart2018" width="100%" preserveAspectRatio="none"></svg>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Resultado por estado — 2022 vs. 2026</h2>
+    <p class="section-note" id="ufSectionNote">Base histórica (município a município) usada para calcular a agulha. A coluna 2026 é preenchida conforme a apuração chega por estado — por ora mostra apenas o ponto de partida de 2022.</p>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>UF</th><th class="num">Lula 2022</th><th class="num">Bolsonaro 2022</th><th class="num">Lula 2026</th><th class="num">Bolsonaro 2026</th><th class="bar-cell">Margem</th></tr>
+        </thead>
+        <tbody id="ufTableBody"></tbody>
+      </table>
+    </div>
+    <div class="legend" style="margin-top:12px">
+      <span><span class="swatch" style="background:var(--lula)"></span>Lula</span>
+      <span><span class="swatch" style="background:var(--bolsonaro)"></span>Bolsonaro</span>
+    </div>
+  </div>
+
+  <footer>
+    Dados: TSE (votação por município, 1º turno) · Construído a partir do painel histórico 1994–2022 já verificado neste projeto.
+    Atualizado em <span id="lastUpdated">—</span>.
+  </footer>
+</div>
+
+<script>
+const byUf = [{"uf":"PI","Bolsonaro":19.9,"Lula":74.25},{"uf":"BA","Bolsonaro":24.31,"Lula":69.73},{"uf":"MA","Bolsonaro":26.02,"Lula":68.84},{"uf":"CE","Bolsonaro":25.38,"Lula":65.91},{"uf":"PE","Bolsonaro":29.91,"Lula":65.27},{"uf":"PB","Bolsonaro":29.62,"Lula":64.21},{"uf":"SE","Bolsonaro":29.16,"Lula":63.82},{"uf":"RN","Bolsonaro":31.02,"Lula":62.98},{"uf":"AL","Bolsonaro":36.05,"Lula":56.5},{"uf":"PA","Bolsonaro":40.27,"Lula":52.22},{"uf":"TO","Bolsonaro":44,"Lula":50.4},{"uf":"AM","Bolsonaro":42.8,"Lula":49.58},{"uf":"MG","Bolsonaro":43.6,"Lula":48.29},{"uf":"AP","Bolsonaro":43.41,"Lula":45.67},{"uf":"RS","Bolsonaro":48.89,"Lula":42.28},{"uf":"SP","Bolsonaro":47.71,"Lula":40.89},{"uf":"RJ","Bolsonaro":51.09,"Lula":40.68},{"uf":"ES","Bolsonaro":52.23,"Lula":40.4},{"uf":"GO","Bolsonaro":52.16,"Lula":39.51},{"uf":"MS","Bolsonaro":52.7,"Lula":39.04},{"uf":"DF","Bolsonaro":51.65,"Lula":36.85},{"uf":"PR","Bolsonaro":55.26,"Lula":35.99},{"uf":"MT","Bolsonaro":59.84,"Lula":34.39},{"uf":"SC","Bolsonaro":62.21,"Lula":29.54},{"uf":"AC","Bolsonaro":62.5,"Lula":29.26},{"uf":"RO","Bolsonaro":64.36,"Lula":28.98},{"uf":"RR","Bolsonaro":69.57,"Lula":23.05}];
+
+// uf -> {lula, bolsonaro} (2026 vote share so far), filled in live from
+// the national doc's `by_uf` field -- empty until real 2026 returns
+// start arriving for that state. The margin bar uses 2026 once a state
+// has it, so it visibly flips from "starting point" to "live" per row.
+let byUf2026Live = {};
+
+function renderUfTable() {
+  const tbody = document.getElementById('ufTableBody');
+  const rows = byUf.map(r => {
+    const live = byUf2026Live[r.uf];
+    const has2026 = !!live && (live.lula + live.bolsonaro) > 0;
+    const lulaAhead2022 = r.Lula >= r.Bolsonaro;
+    const barLula = has2026 ? live.lula : r.Lula;
+    const barBolso = has2026 ? live.bolsonaro : r.Bolsonaro;
+    const barTotal = barLula + barBolso;
+    const lulaPct = barTotal > 0 ? (barLula / barTotal) * 100 : 50;
+    const lulaAhead2026 = has2026 && live.lula >= live.bolsonaro;
+    return `<tr>
+      <td>${r.uf}</td>
+      <td class="num" style="color:var(--lula);font-weight:${lulaAhead2022 ? 700 : 400}">${r.Lula.toFixed(1)}%</td>
+      <td class="num" style="color:var(--bolsonaro);font-weight:${!lulaAhead2022 ? 700 : 400}">${r.Bolsonaro.toFixed(1)}%</td>
+      <td class="num" style="color:var(--lula);font-weight:${lulaAhead2026 ? 700 : 400}">${has2026 ? live.lula.toFixed(1) + '%' : '—'}</td>
+      <td class="num" style="color:var(--bolsonaro);font-weight:${has2026 && !lulaAhead2026 ? 700 : 400}">${has2026 ? live.bolsonaro.toFixed(1) + '%' : '—'}</td>
+      <td class="bar-cell">
+        <div class="bar-track">
+          <div class="bar-fill" style="left:0; width:${lulaPct}%; background:var(--lula)"></div>
+          <div class="bar-fill" style="left:${lulaPct}%; width:${100 - lulaPct}%; background:var(--bolsonaro)"></div>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+  tbody.innerHTML = rows;
+}
+renderUfTable();
+
+// Gauge: domain -20..+20 percentage points (projected national margin,
+// Lula minus Bolsonaro), mapped to a 180deg arc (left=Bolsonaro up,
+// right=Lula up). valueToAngle/polarToXY/describeArc are small helpers
+// so the 95% confidence band (a second arc drawn around the pointer,
+// radius 115, just outside the colored track) can be computed from the
+// same angle math as the pointer itself, rather than eyeballed.
+const GAUGE_CX = 120, GAUGE_CY = 130;
+function valueToAngle(v) {
+  const clamped = Math.max(-20, Math.min(20, v));
+  const t = (clamped + 20) / 40; // 0..1
+  return -180 + t * 180; // -180 (left) .. 0 (right)
+}
+function polarToXY(cx, cy, r, angleDeg) {
+  const rad = (angleDeg * Math.PI) / 180;
+  return [cx + r * Math.cos(rad), cy + r * Math.sin(rad)];
+}
+function describeArc(cx, cy, r, startAngle, endAngle) {
+  const [x1, y1] = polarToXY(cx, cy, r, startAngle);
+  const [x2, y2] = polarToXY(cx, cy, r, endAngle);
+  const largeArc = Math.abs(endAngle - startAngle) > 180 ? 1 : 0;
+  return `M ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${largeArc} 1 ${x2.toFixed(2)} ${y2.toFixed(2)}`;
+}
+// A filled pie-wedge from the gauge's own center out to r -- the
+// confidence band as a shaded fan directly behind/around the pointer,
+// rather than a separate ring drawn on top of the colored track.
+function describeSector(cx, cy, r, startAngle, endAngle) {
+  const [x1, y1] = polarToXY(cx, cy, r, startAngle);
+  const [x2, y2] = polarToXY(cx, cy, r, endAngle);
+  const largeArc = Math.abs(endAngle - startAngle) > 180 ? 1 : 0;
+  return `M ${cx} ${cy} L ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${largeArc} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} Z`;
+}
+
+function setGauge(marginPp, sePp) {
+  const hasValue = marginPp !== null && marginPp !== undefined && !Number.isNaN(marginPp);
+  const angleDeg = valueToAngle(hasValue ? marginPp : 0);
+  const [x2, y2] = polarToXY(GAUGE_CX, GAUGE_CY, 88, angleDeg);
+  document.getElementById('needlePointer').setAttribute('x2', x2.toFixed(1));
+  document.getElementById('needlePointer').setAttribute('y2', y2.toFixed(1));
+  document.getElementById('needleValue').textContent = hasValue ? (marginPp >= 0 ? '+' : '') + marginPp.toFixed(1) + ' p.p.' : '—';
+
+  const ciBand = document.getElementById('ciBand');
+  const ciText = document.getElementById('gaugeCiText');
+  const hasSe = hasValue && sePp !== null && sePp !== undefined && !Number.isNaN(sePp) && sePp > 0;
+  if (hasSe) {
+    const lo = marginPp - 1.96 * sePp;
+    const hi = marginPp + 1.96 * sePp;
+    const angLo = valueToAngle(lo), angHi = valueToAngle(hi);
+    ciBand.setAttribute('d', describeSector(GAUGE_CX, GAUGE_CY, 88, angLo, angHi));
+    ciBand.setAttribute('opacity', '0.28');
+    const sign = (v) => (v >= 0 ? '+' : '');
+    ciText.textContent = 'IC 95%: ' + sign(lo) + lo.toFixed(1) + ' a ' + sign(hi) + hi.toFixed(1) + ' p.p.';
+  } else {
+    ciBand.setAttribute('opacity', '0');
+    ciText.textContent = '';
+  }
+}
+setGauge(null, null);
+
+function fmtPp(v) {
+  if (v === null || v === undefined || Number.isNaN(v)) return '—';
+  const sign = v >= 0 ? '+' : '';
+  return sign + v.toFixed(1);
+}
+function fmtInt(v) {
+  if (v === null || v === undefined) return '0';
+  return Math.round(v).toLocaleString('pt-BR');
+}
+function fmtPct01(v) {
+  if (v === null || v === undefined || Number.isNaN(v)) return '—';
+  return Math.round(v * 100) + '%';
+}
+function fmtClock(iso) {
+  try { return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }); }
+  catch (e) { return '—'; }
+}
+
+// Draws one history mini-chart: the projected margin over time as a
+// line, with a shaded 95% confidence band (±1.96 SE) around it and a
+// dashed line at 0 (the toss-up boundary). `points` is the array
+// stored at needle/history's `points` field -- kept as a single
+// bounded array in ONE document (not one document per polling run),
+// per the db capability's own guidance against mapping a growing
+// stream to one document per item. Hand-rolled SVG (matching the
+// gauge above) rather than a charting library, since the artifact CSP
+// only admits a couple of script CDNs and this is simple enough not to
+// need one.
+function renderHistoryChart(svgEl, points, marginKey, seKey, colorVar) {
+  const W = 560, H = 170, padL = 42, padR = 10, padT = 10, padB = 22;
+  svgEl.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+  const valid = (points || []).filter(p => p && p[marginKey] !== null && p[marginKey] !== undefined && p[seKey] !== null && p[seKey] !== undefined && p.t);
+  if (valid.length === 0) {
+    svgEl.innerHTML = '<text x="' + (W / 2) + '" y="' + (H / 2) + '" text-anchor="middle" fill="var(--muted)" font-size="13">Aguardando apuração.</text>';
+    return;
+  }
+  const ts = valid.map(p => new Date(p.t).getTime());
+  const tMin = Math.min(...ts), tMax = Math.max(...ts);
+  const vals = [0];
+  valid.forEach(p => { vals.push(p[marginKey] - 1.96 * p[seKey], p[marginKey] + 1.96 * p[seKey]); });
+  let yMin = Math.min(...vals), yMax = Math.max(...vals);
+  if (yMin === yMax) { yMin -= 1; yMax += 1; }
+  const pad = (yMax - yMin) * 0.08;
+  yMin -= pad; yMax += pad;
+
+  const xScale = (t) => tMax === tMin ? (padL + (W - padL - padR) / 2) : padL + (t - tMin) / (tMax - tMin) * (W - padL - padR);
+  const yScale = (v) => padT + (1 - (v - yMin) / (yMax - yMin)) * (H - padT - padB);
+
+  const upper = valid.map(p => [xScale(new Date(p.t).getTime()), yScale(p[marginKey] + 1.96 * p[seKey])]);
+  const lower = valid.map(p => [xScale(new Date(p.t).getTime()), yScale(p[marginKey] - 1.96 * p[seKey])]).reverse();
+  const bandPath = 'M ' + upper.map(pt => pt.join(',')).join(' L ') + ' L ' + lower.map(pt => pt.join(',')).join(' L ') + ' Z';
+  const linePath = 'M ' + valid.map(p => xScale(new Date(p.t).getTime()) + ',' + yScale(p[marginKey])).join(' L ');
+  const zeroY = yScale(0);
+  const circles = valid.map(p => '<circle cx="' + xScale(new Date(p.t).getTime()).toFixed(1) + '" cy="' + yScale(p[marginKey]).toFixed(1) + '" r="2.4" fill="' + colorVar + '"/>').join('');
+
+  // Y-axis: a vertical rule plus tick marks/labels at yMin, 0 and yMax
+  // (0 is always inside the range -- it's forced into `vals` above) so
+  // the line's scale is actually legible, not just its shape.
+  const fmtAxisPp = (v) => (v >= 0 ? '+' : '') + v.toFixed(1);
+  const yTicks = [yMin + pad * 0.3, 0, yMax - pad * 0.3].filter((v, i, arr) => i === 1 || Math.abs(v - 0) > (yMax - yMin) * 0.08);
+  const yAxisMarks = yTicks.map(v => {
+    const y = yScale(v).toFixed(1);
+    return '<line x1="' + (padL - 3) + '" y1="' + y + '" x2="' + padL + '" y2="' + y + '" stroke="var(--muted)" stroke-width="1"/>' +
+      '<text x="' + (padL - 6) + '" y="' + (parseFloat(y) + 3) + '" font-size="10" fill="var(--muted)" text-anchor="end">' + fmtAxisPp(v) + '</text>';
+  }).join('');
+
+  svgEl.innerHTML =
+    '<line x1="' + padL + '" y1="' + padT + '" x2="' + padL + '" y2="' + (H - padB) + '" stroke="var(--hair)" stroke-width="1"/>' +
+    '<line x1="' + padL + '" y1="' + zeroY.toFixed(1) + '" x2="' + (W - padR) + '" y2="' + zeroY.toFixed(1) + '" stroke="var(--hair)" stroke-width="1" stroke-dasharray="3,3"/>' +
+    '<path d="' + bandPath + '" fill="' + colorVar + '" opacity="0.16"/>' +
+    '<path d="' + linePath + '" fill="none" stroke="' + colorVar + '" stroke-width="1.8"/>' +
+    circles +
+    yAxisMarks +
+    '<text x="' + padL + '" y="' + (H - 6) + '" font-size="10" fill="var(--muted)">' + fmtClock(valid[0].t) + '</text>' +
+    '<text x="' + (W - padR) + '" y="' + (H - 6) + '" font-size="10" fill="var(--muted)" text-anchor="end">' + fmtClock(valid[valid.length - 1].t) + '</text>';
+}
+
+// Renders one probability block (prefix "2022" or "2018"): a Lula/
+// Bolsonaro probability bar, the projected margin ± its standard error,
+// and a badge comparing how scattered THIS election's município-level
+// swings are against the historical (2018->2022) norm -- the
+// "our prior is looking unreliable" signal Miguel asked for.
+function setProbBlock(prefix, probLula, marginPp, sePp, dispersionRatio, fracVotes) {
+  const pLula = (probLula === null || probLula === undefined || Number.isNaN(probLula)) ? null : probLula;
+  const pBolso = pLula === null ? null : 1 - pLula;
+  document.getElementById('probBarLula' + prefix).style.width = (pLula === null ? 50 : pLula * 100) + '%';
+  document.getElementById('probBarBolsonaro' + prefix).style.width = (pBolso === null ? 50 : pBolso * 100) + '%';
+  document.getElementById('probLula' + prefix).textContent = pLula === null ? '—' : fmtPct01(pLula);
+  document.getElementById('probBolsonaro' + prefix).textContent = pBolso === null ? '—' : fmtPct01(pBolso);
+
+  const sub = document.getElementById('margin' + prefix + 'sub');
+  if (marginPp === null || marginPp === undefined || Number.isNaN(marginPp)) {
+    sub.textContent = 'Aguardando apuração.';
+  } else {
+    const sign = marginPp >= 0 ? '+' : '';
+    sub.textContent = 'margem projetada: ' + sign + marginPp.toFixed(1) + ' p.p. (Lula − Bolsonaro) ± ' + (sePp || 0).toFixed(1) + ' p.p.';
+  }
+
+  const badge = document.getElementById('dispersion' + prefix);
+  if (dispersionRatio === null || dispersionRatio === undefined || Number.isNaN(dispersionRatio)) {
+    badge.textContent = '';
+    badge.className = 'prob-dispersion';
+  } else if (dispersionRatio > 1.4) {
+    badge.textContent = '⚠ municípios mais divididos que o normal';
+    badge.className = 'prob-dispersion high';
+  } else if (dispersionRatio < 0.7) {
+    badge.textContent = 'padrão muito consistente com o histórico';
+    badge.className = 'prob-dispersion low';
+  } else {
+    badge.textContent = 'variação dentro do padrão histórico';
+    badge.className = 'prob-dispersion';
+  }
+
+  const basis = document.getElementById('basis' + prefix);
+  basis.textContent = (fracVotes === null || fracVotes === undefined || Number.isNaN(fracVotes))
+    ? '' : 'Baseado em ' + fmtPct01(fracVotes) + ' dos votos nacionais esperados.';
+}
+
+function applySnapshot(doc) {
+  if (!doc) return;
+  const lula2022 = doc.needle_lula_vs_2022;
+  const lulaHaddad2018 = doc.needle_lula_vs_haddad_2018;
+  const bolso22 = doc.needle_bolsonaro_vs_2022;
+  const bolso18 = doc.needle_bolsonaro_vs_2018;
+
+  document.getElementById('rowLula2022').innerHTML = fmtPp(lula2022) + '<span class="unit">p.p.</span>';
+  document.getElementById('rowLulaHaddad2018').innerHTML = fmtPp(lulaHaddad2018) + '<span class="unit">p.p.</span>';
+  document.getElementById('rowBolso2022').innerHTML = fmtPp(bolso22) + '<span class="unit">p.p.</span>';
+  document.getElementById('rowBolso2018').innerHTML = fmtPp(bolso18) + '<span class="unit">p.p.</span>';
+
+  setGauge(doc.margin_projected_2022_pp, doc.margin_se_2022_pp);
+
+  setProbBlock('2022', doc.prob_lula_2022, doc.margin_projected_2022_pp, doc.margin_se_2022_pp, doc.dispersion_ratio_2022, doc.frac_votes_counted);
+  setProbBlock('2018', doc.prob_lula_2018, doc.margin_projected_2018_pp, doc.margin_se_2018_pp, doc.dispersion_ratio_2018, doc.frac_votes_counted);
+
+  document.getElementById('statMun').innerHTML = fmtInt(doc.n_municipios) + ' <span style="font-size:16px;color:var(--muted)">/ 5.570</span>';
+  document.getElementById('statPct').textContent = (doc.pct_municipios ? doc.pct_municipios.toFixed(1) : '0') + '%';
+  document.getElementById('statFracVotos').textContent = fmtPct01(doc.frac_votes_counted);
+  document.getElementById('statVotos').textContent = fmtInt(doc.votos_totais);
+
+  if (Array.isArray(doc.by_uf) && doc.by_uf.length > 0) {
+    byUf2026Live = {};
+    doc.by_uf.forEach(r => { byUf2026Live[r.uf] = { lula: r.lula_2026, bolsonaro: r.bolsonaro_2026 }; });
+    document.getElementById('ufSectionNote').textContent = 'Comparando o 1º turno de 2022 com a apuração de 2026 em andamento, por estado.';
+  }
+  renderUfTable();
+
+  const pill = document.getElementById('statusPill');
+  const text = document.getElementById('statusText');
+  if (doc.status === 'live') {
+    pill.classList.add('live');
+    text.textContent = 'Apuração em andamento';
+  } else if (doc.status === 'final') {
+    pill.classList.remove('live');
+    text.textContent = 'Apuração encerrada';
+  } else {
+    pill.classList.remove('live');
+    text.textContent = 'Aguardando 4 de outubro';
+  }
+
+  if (doc.updated_at) {
+    document.getElementById('lastUpdated').textContent = new Date(doc.updated_at).toLocaleString('pt-BR');
+  }
+}
+
+async function boot() {
+  const start = async () => {
+    try {
+      const db = await window.claude?.use?.('db');
+      if (db) {
+        // NOTE (fixed 2026-09-25): DocumentSnapshot.data is a METHOD,
+        // not a plain property -- `doc.data` alone is a function
+        // reference (truthy, but not the document body), which
+        // silently produced an all-undefined snapshot indistinguishable
+        // from "no data yet" in every field read below. Call it.
+        db.doc('needle/national').onSnapshot((doc) => {
+          if (doc && doc.exists) applySnapshot(doc.data());
+        });
+        db.doc('needle/history').onSnapshot((doc) => {
+          const points = (doc && doc.exists && doc.data().points) || [];
+          renderHistoryChart(document.getElementById('historyChart2022'), points, 'margin_2022', 'se_2022', 'var(--lula)');
+          renderHistoryChart(document.getElementById('historyChart2018'), points, 'margin_2018', 'se_2018', 'var(--lula)');
+        });
+      }
+    } catch (e) {
+      console.warn('db capability unavailable', e);
+    }
+  };
+  if (window.claude?.hot?.ready) {
+    window.claude.hot.ready(start);
+  } else {
+    start();
+  }
+}
+boot();
+</script>

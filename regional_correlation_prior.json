@@ -1,0 +1,9 @@
+{
+  "prior_sigma2_between_rgi": 0.0115,
+  "prior_sigma2_within_rgi": 0.0028,
+  "prior_rho_rgi": 0.8064,
+  "n_clusters_used": 510,
+  "n_municipios_used": 5570,
+  "built": "2026-09-25 15:26:34",
+  "note": "Weighted one-way ANOVA decomposition of the 2018->2022 município-level margin swing, by IBGE regiao imediata (CD_RGI). Used by poll_live_results.R as a Bayesian shrinkage prior for the live between/within-regiao variance decomposition."
+}
