@@ -16,7 +16,10 @@
 # during the long, mostly-static tail.
 #
 # TIERS (elapsed time since POLLS_CLOSE_TIME):
-#   [0h,  3h): every   3 min -- the fast ramp; ~97-99% typically arrives here
+#   [0h,  3h): every   4 min -- the fast ramp; ~97-99% typically arrives here
+#                               (was 3 min; a paced full-national fetch takes
+#                               ~85-105s against the real endpoint, so 4 min
+#                               leaves headroom -- see fetch_all() pacing notes)
 #   [3h,  5h): every  12 min -- tapering as coverage approaches ~99%
 #   [5h, 24h): every  60 min -- slow trickle (2022 round 2 took ~4.5h just
 #                               for its last 1.5%)
@@ -87,7 +90,7 @@ POLLS_CLOSE_TIME <- as.POSIXct(Sys.getenv("POLLS_CLOSE_TIME", "2026-10-04 17:05:
 MAX_ITERATIONS <- as.numeric(Sys.getenv("MAX_ITERATIONS", Inf))
 
 TIERS <- list(
-  list(rank = 1, interval_min = 3,   label = "tier1_fast_ramp"),
+  list(rank = 1, interval_min = 4,   label = "tier1_fast_ramp"),
   list(rank = 2, interval_min = 12,  label = "tier2_taper"),
   list(rank = 3, interval_min = 60,  label = "tier3_long_tail"),
   list(rank = 4, interval_min = 120, label = "tier4_worst_case_tail")
@@ -164,7 +167,12 @@ repeat {
 
   frac_counted <- NA_real_
   status <- if (run_result$ok) "ok" else "error"
-  note <- if (run_result$ok) "" else run_result$output[1]
+  # poll_live_results.R's own output is captured above, not printed --
+  # surface its fetch summary (successes / 429s / failures) so blocking
+  # is visible per cycle in this log.
+  fetch_lines <- if (run_result$ok) grep("Done in|Nothing left to fetch|got HTTP 429", run_result$output, value = TRUE) else character()
+  if (length(fetch_lines) > 0) cat(paste0("  ", trimws(fetch_lines), collapse = "\n"), "\n")
+  note <- if (run_result$ok) paste(trimws(fetch_lines), collapse = " | ") else run_result$output[1]
 
   if (run_result$ok && file.exists(SUMMARY_JSON)) {
     summ <- tryCatch(fromJSON(SUMMARY_JSON), error = function(e) NULL)
@@ -202,8 +210,12 @@ repeat {
     break
   }
 
-  cat("Sleeping", sleep_tier$interval_min, "min until next poll...\n")
-  Sys.sleep(sleep_tier$interval_min * 60)
+  # The interval is start-to-start: subtract this cycle's own runtime so a
+  # ~90s fetch doesn't stretch a 4-min cadence to ~5.5 min.
+  cycle_secs <- as.numeric(difftime(Sys.time(), now, units = "secs"))
+  sleep_secs <- max(0, sleep_tier$interval_min * 60 - cycle_secs)
+  cat("Cycle took", round(cycle_secs), "s; sleeping", round(sleep_secs), "s until next poll (", sleep_tier$interval_min, "min cadence)...\n")
+  Sys.sleep(sleep_secs)
 }
 
 cat("\n=== Tiered polling schedule ended", format(Sys.time()), "===\n")
