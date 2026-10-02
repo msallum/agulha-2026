@@ -219,32 +219,86 @@ t_fetch_start <- Sys.time()
 # regardless of our own setting.
 FETCH_CONCURRENCY <- 40
 
-fetch_all <- function(df, concurrency = FETCH_CONCURRENCY) {
+# PACING (fixed 2026-10-02, after testing directly against the real
+# production endpoint): curl's host_con/total_con do NOT meaningfully
+# pace requests here -- the server negotiates HTTP/2, which multiplexes
+# many streams per connection, so curl fires almost the entire queue
+# within ~1-2 seconds regardless of the configured concurrency
+# (measured: 300-request probes took 1.1-2.4s at every tested level,
+# 5/10/20/40). What actually determines success is whether a recent
+# burst already tripped TSE's rate limiter: once tripped, requests get
+# 429'd for roughly 15-45+ seconds before it clears (one full
+# 5,757-request run at host_con=40 got only 34% success -- 1,958/5,757
+# -- almost entirely from this). So real pacing has to come from
+# batching with an explicit pause between batches plus a 429-aware
+# retry pass, not from the connection-pool size, which is kept here
+# only because dropping it to 1 would serialize transfers within each
+# batch for no benefit.
+BATCH_SIZE <- 250
+BATCH_PAUSE_SEC <- 3
+MAX_FETCH_RETRIES <- 3
+RETRY_BACKOFF_SEC <- 20
+
+fetch_batch <- function(urls, dests, concurrency) {
   pool <- new_pool(total_con = concurrency, host_con = concurrency)
-  results <- vector("list", nrow(df))
-  for (i in seq_len(nrow(df))) {
-    h <- new_handle(url = df$url[i])
+  results <- vector("list", length(urls))
+  for (i in seq_along(urls)) {
     local({
       idx <- i
-      dest_i <- df$dest[i]
-      curl_fetch_multi(df$url[i], pool = pool,
+      dest_i <- dests[idx]
+      curl_fetch_multi(urls[idx], pool = pool,
                         done = function(res) {
                           if (res$status_code == 200) writeBin(res$content, dest_i)
                           results[[idx]] <<- res$status_code
                         },
-                        fail = function(msg) { results[[idx]] <<- NA })
+                        fail = function(msg) { results[[idx]] <<- NA_integer_ })
     })
   }
   multi_run(pool = pool)
   unlist(results)
 }
 
+fetch_all <- function(df, concurrency = FETCH_CONCURRENCY, batch_size = BATCH_SIZE,
+                       batch_pause = BATCH_PAUSE_SEC, max_retries = MAX_FETCH_RETRIES,
+                       retry_backoff = RETRY_BACKOFF_SEC) {
+  n <- nrow(df)
+  final_status <- rep(NA_integer_, n)
+  pending <- seq_len(n)
+  attempt <- 0
+  repeat {
+    attempt <- attempt + 1
+    n_pending <- length(pending)
+    if (n_pending == 0) break
+    cat("  fetch attempt", attempt, "--", n_pending, "url(s)\n")
+    batch_starts <- seq(1, n_pending, by = batch_size)
+    attempt_status <- rep(NA_integer_, n_pending)
+    for (bi in seq_along(batch_starts)) {
+      idx_range <- batch_starts[bi]:min(batch_starts[bi] + batch_size - 1, n_pending)
+      rows <- pending[idx_range]
+      attempt_status[idx_range] <- fetch_batch(df$url[rows], df$dest[rows], concurrency)
+      if (bi < length(batch_starts)) Sys.sleep(batch_pause)
+    }
+    final_status[pending] <- attempt_status
+    retry_mask <- !is.na(attempt_status) & attempt_status == 429
+    if (!any(retry_mask) || attempt > max_retries) break
+    pending <- pending[retry_mask]
+    cat("  ", sum(retry_mask), "got HTTP 429 -- backing off", retry_backoff, "s before retry\n")
+    Sys.sleep(retry_backoff)
+  }
+  final_status
+}
+
 if (nrow(to_fetch) > 0) {
-  cat("Fetching ", nrow(to_fetch), " municipality result files (concurrency=", FETCH_CONCURRENCY, ")...\n", sep = "")
+  cat("Fetching ", nrow(to_fetch), " municipality result files (concurrency=", FETCH_CONCURRENCY,
+      ", batch_size=", BATCH_SIZE, ")...\n", sep = "")
   t0 <- Sys.time()
   status <- fetch_all(to_fetch)
+  n429 <- sum(status == 429, na.rm = TRUE)
+  nother <- sum(!is.na(status) & !status %in% c(200, 429))
+  nconnfail <- sum(is.na(status))
   cat("Done in", round(difftime(Sys.time(), t0, units = "secs"), 1), "seconds. ",
-      sum(status == 200, na.rm = TRUE), "of", nrow(to_fetch), "succeeded.\n")
+      sum(status == 200, na.rm = TRUE), "of", nrow(to_fetch), "succeeded (",
+      n429, "429s,", nother, "other codes,", nconnfail, "connection failures ).\n")
 } else {
   cat("Nothing left to fetch -- every município is already cached as complete.\n")
 }
