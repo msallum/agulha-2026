@@ -234,10 +234,10 @@ FETCH_CONCURRENCY <- 40
 # retry pass, not from the connection-pool size, which is kept here
 # only because dropping it to 1 would serialize transfers within each
 # batch for no benefit.
-BATCH_SIZE <- 250
-BATCH_PAUSE_SEC <- 3
+BATCH_SIZE <- 400
+BATCH_PAUSE_SEC <- 1.5
 MAX_FETCH_RETRIES <- 3
-RETRY_BACKOFF_SEC <- 20
+RETRY_BACKOFF_SEC <- 15
 
 fetch_batch <- function(urls, dests, concurrency) {
   pool <- new_pool(total_con = concurrency, host_con = concurrency)
