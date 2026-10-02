@@ -60,7 +60,7 @@ OUT_DIR <- getwd()
 SCRATCH <- file.path(tempdir(), "needle_poll")
 dir.create(SCRATCH, showWarnings = FALSE, recursive = TRUE)
 
-use_simulado <- TRUE  # flip to FALSE on election night
+use_simulado <- as.logical(Sys.getenv("USE_SIMULADO", "TRUE"))  # flip via USE_SIMULADO=FALSE env var, or edit the default here on election night
 
 if (use_simulado) {
   BASE <- "https://resultados-sim.tse.jus.br/simulado/simulado2026"
@@ -87,11 +87,20 @@ discover_election_code <- function() {
   # Each "pl" (pleito) has an "e" list of elections; look for a 2026
   # entry whose name mentions "Geral" (general election) -- presidential
   # races run under the "Eleição Geral Federal" umbrella in TSE's system.
+  # NOTE (fixed 2026-10-02): originally matched only "Geral", on the
+  # assumption presidential races run under an "Eleição Geral" umbrella
+  # (true in some past cycles). Confirmed against TSE's real catalog
+  # that 2026 instead splits into separate "Ordinária Federal" (federal
+  # offices incl. president, cd 6257), "Ordinária Estadual" (governors),
+  # and "Ordinária Municipal" (mayors) pleitos -- no "Geral" entry
+  # exists this cycle. Match "Federal" too so this keeps working
+  # regardless of which naming convention TSE uses in a given cycle.
   hits <- list()
   for (i in seq_len(nrow(pl))) {
     e <- pl$e[[i]]
     if (is.null(e) || nrow(e) == 0) next
-    matches <- grepl("2026", e$nm, ignore.case = TRUE) & grepl("Geral", e$nm, ignore.case = TRUE)
+    matches <- grepl("2026", e$nm, ignore.case = TRUE) &
+      (grepl("Geral", e$nm, ignore.case = TRUE) | grepl("Federal", e$nm, ignore.case = TRUE))
     if (any(matches)) hits[[length(hits) + 1]] <- e[matches, ]
   }
   if (length(hits) == 0) {
