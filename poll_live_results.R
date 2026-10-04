@@ -495,6 +495,18 @@ if (nrow(reporting) > 0) {
 # or exported it, unlike the simulation test scripts which always had
 # it. `uf` now survives the join above (comparison %>% select(codigo_tse, uf))
 # specifically so this can be computed.
+# Share of each state's expected valid votes counted so far: a município's
+# expected total is its 2022 valid votes until it reaches 100% (then what
+# was counted), never less than what's already counted.
+uf_counted <- comparison %>%
+  filter(!is.na(uf)) %>%
+  mutate(counted = coalesce(votos_validos_total_2026, 0),
+         expected = ifelse(!is.na(pct_secoes_apuradas) & pct_secoes_apuradas >= 100, counted,
+                           pmax(counted, coalesce(turnout_2022, 0)))) %>%
+  group_by(uf) %>%
+  summarise(pct_counted = if (sum(expected) > 0) 100 * sum(counted) / sum(expected) else 0, .groups = "drop") %>%
+  mutate(uf = toupper(uf))
+
 by_uf <- if (nrow(reporting) > 0) {
   reporting %>%
     filter(!is.na(uf), !is.na(votos_validos_total_2026), votos_validos_total_2026 > 0) %>%
@@ -502,7 +514,8 @@ by_uf <- if (nrow(reporting) > 0) {
     summarise(lula_2026 = 100 * sum(votos_lula_2026, na.rm = TRUE) / sum(votos_validos_total_2026, na.rm = TRUE),
               bolsonaro_2026 = 100 * sum(votos_bolsonaro_2026, na.rm = TRUE) / sum(votos_validos_total_2026, na.rm = TRUE),
               .groups = "drop") %>%
-    mutate(uf = toupper(uf))
+    mutate(uf = toupper(uf)) %>%
+    left_join(uf_counted, by = "uf")
 } else {
   tibble(uf = character(), lula_2026 = numeric(), bolsonaro_2026 = numeric())
 }
@@ -667,7 +680,12 @@ UNCERTAINTY_INFLATION_FACTOR <- SE_INFLATION_FACTOR^2  # = 4; applied to sigma2_
 N_DRAWS_MC <- 2000
 
 compute_needle_probability <- function(df_reporting, df_not_reporting, margin_swing_col, margin_baseline_col,
-                                        votes_pt_col = "votos_lula_2026", votes_bolso_col = "votos_bolsonaro_2026") {
+                                        votes_pt_col = "votos_lula_2026", votes_bolso_col = "votos_bolsonaro_2026",
+                                        prior_scale = 1, threshold = 0) {
+  # prior_scale/threshold let the same model project one candidate's SHARE
+  # (prior variance scaled to share units) and P(share > threshold).
+  PRIOR_SIGMA2_WITHIN_RGI <- PRIOR_SIGMA2_WITHIN_RGI * prior_scale
+  PRIOR_SIGMA2_BETWEEN_RGI <- PRIOR_SIGMA2_BETWEEN_RGI * prior_scale
   rep_valid <- df_reporting %>%
     filter(!is.na(.data[[margin_swing_col]]), !is.na(votos_validos_total_2026), votos_validos_total_2026 > 0)
   # A município can show pct_secoes_apuradas > 0 (so it lands in
@@ -860,7 +878,7 @@ compute_needle_probability <- function(df_reporting, df_not_reporting, margin_sw
   # expected variance + between-draw variance of the mean) so both
   # sources of uncertainty show up in projecao_erro_padrao_pp.
   prob_pt_leads <- if (projected_total_valid <= 0) NA_real_ else
-    mean(pnorm(projected_margin_share_draws / sqrt(pmax(var_projection_draws, .Machine$double.eps))))
+    mean(pnorm((projected_margin_share_draws - threshold) / sqrt(pmax(var_projection_draws, .Machine$double.eps))))
   projected_margin_share <- if (projected_total_valid > 0) mean(projected_margin_share_draws) else NA_real_
   var_projection <- if (projected_total_valid > 0) mean(var_projection_draws) + var(projected_margin_share_draws) else NA_real_
   se_projection <- sqrt(var_projection)
@@ -886,6 +904,14 @@ compute_needle_probability <- function(df_reporting, df_not_reporting, margin_sw
 
 result_2022 <- compute_needle_probability(reporting, not_reporting, "margin_swing_vs_2022", "margin_baseline_2022")
 result_2018 <- compute_needle_probability(reporting, not_reporting, "margin_swing_vs_haddad_2018", "margin_baseline_2018")
+# First-round question: Bolsonaro's projected share of ALL valid votes and
+# P(> 50%). Same model, applied to his own share swing; votes_bolso_col is a
+# zero column so "known margin votes" are just his counted votes. Prior
+# variance scaled to share units (a margin swing is ~2x a share swing).
+result_bolso_share <- compute_needle_probability(reporting %>% mutate(zero_votes = 0), not_reporting,
+                                                 "swing_bolsonaro_vs_2022", "share_bolsonaro_2022",
+                                                 votes_pt_col = "votos_bolsonaro_2026", votes_bolso_col = "zero_votes",
+                                                 prior_scale = 0.25, threshold = 0.5)
 
 cat("\n=== PROBABILISTIC NEEDLE -- baseline 2022 ===\n"); print(result_2022)
 cat("\n=== PROBABILISTIC NEEDLE -- baseline 2018 (Haddad) ===\n"); print(result_2018)
@@ -916,6 +942,9 @@ summary_out <- list(
   design_effect_2022 = result_2022$design_effect,
   design_effect_2018 = result_2018$design_effect,
   n_regioes_reportando_2022 = result_2022$n_regioes_reportando,
+  bolsonaro_share_projected_pct = result_bolso_share$projecao_margem_pp,
+  bolsonaro_share_se_pp = result_bolso_share$projecao_erro_padrao_pp,
+  prob_bolsonaro_first_round = result_bolso_share$prob_pt_lidera,
   by_uf = by_uf
 )
 write_json(summary_out, file.path(OUT_DIR, "live_needle_summary_latest.json"), auto_unbox = TRUE, pretty = TRUE, na = "null")

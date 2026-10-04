@@ -159,6 +159,12 @@
   .prob-readout { display: flex; justify-content: space-between; margin-top: 7px; font-family: "Barlow Condensed", system-ui, sans-serif; font-weight: 700; font-size: 16px; }
   .prob-sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
 
+  .fr-track { position: relative; height: 24px; border-radius: 6px; overflow: hidden; background: var(--panel-2); }
+  .fr-fill { position: absolute; top: 0; bottom: 0; left: 0; background: var(--bolsonaro); transition: width 0.4s ease; }
+  .fr-ci { position: absolute; top: 0; bottom: 0; background: var(--bolsonaro); opacity: 0.3; }
+  .fr-line { position: absolute; top: 0; bottom: 0; left: 50%; width: 2px; margin-left: -1px; background: var(--ink); }
+  .fr-line-label { position: absolute; top: 4px; left: calc(50% + 6px); font-size: 11px; font-weight: 700; color: var(--ink); }
+
   .history-chart-wrap { display: flex; flex-direction: column; gap: 4px; }
   .history-chart-label { font-size: 11.5px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
   .history-chart-wrap svg { width: 100%; height: 170px; display: block; }
@@ -238,6 +244,25 @@
   </div>
 
   <div class="panel">
+    <h2>1º turno — Bolsonaro passa de 50%?</h2>
+    <p class="section-note">
+      Projeção da votação final de Bolsonaro em votos válidos, pelo mesmo método da agulha: o voto já apurado mais a
+      variação regional aplicada ao que falta apurar. Acima de 50%, a eleição termina no 1º turno.
+    </p>
+    <div class="fr-track">
+      <div class="fr-ci" id="frCi"></div>
+      <div class="fr-fill" id="frFill" style="width:0%"></div>
+      <div class="fr-line"></div>
+      <span class="fr-line-label">50%</span>
+    </div>
+    <div class="prob-readout">
+      <span style="color:var(--bolsonaro)" id="frShare">—</span>
+      <span style="color:var(--ink)" id="frProb">—</span>
+    </div>
+    <div class="prob-sub" id="frSub">Aguardando apuração.</div>
+  </div>
+
+  <div class="panel">
     <h2>Probabilidade — quem lidera ao final da apuração</h2>
     <p class="section-note">
       Projeção do resultado nacional: a variação média (ponderada por voto) observada nos municípios já apurados é
@@ -305,7 +330,7 @@
     <div class="table-scroll">
       <table>
         <thead>
-          <tr><th>UF</th><th class="num">Lula 2022</th><th class="num">Bolsonaro 2022</th><th class="num">Lula 2026</th><th class="num">Bolsonaro 2026</th><th class="bar-cell">Margem</th></tr>
+          <tr><th>UF</th><th class="num">Apurado</th><th class="num">Lula 2022</th><th class="num">Bolsonaro 2022</th><th class="num">Lula 2026</th><th class="num">Bolsonaro 2026</th><th class="bar-cell">Margem</th></tr>
         </thead>
         <tbody id="ufTableBody"></tbody>
       </table>
@@ -342,8 +367,10 @@ function renderUfTable() {
     const barTotal = barLula + barBolso;
     const lulaPct = barTotal > 0 ? (barLula / barTotal) * 100 : 50;
     const lulaAhead2026 = has2026 && live.lula >= live.bolsonaro;
+    const pctCounted = live && live.pct_counted !== null && live.pct_counted !== undefined ? live.pct_counted : null;
     return `<tr>
       <td>${r.uf}</td>
+      <td class="num" style="color:var(--muted)">${pctCounted === null ? '—' : Math.round(pctCounted) + '%'}</td>
       <td class="num" style="color:var(--lula);font-weight:${lulaAhead2022 ? 700 : 400}">${r.Lula.toFixed(1)}%</td>
       <td class="num" style="color:var(--bolsonaro);font-weight:${!lulaAhead2022 ? 700 : 400}">${r.Bolsonaro.toFixed(1)}%</td>
       <td class="num" style="color:var(--lula);font-weight:${lulaAhead2026 ? 700 : 400}">${has2026 ? live.lula.toFixed(1) + '%' : '—'}</td>
@@ -536,6 +563,31 @@ function setProbBlock(prefix, probLula, marginPp, sePp, dispersionRatio, fracVot
     ? '' : 'Baseado em ' + fmtPct01(fracVotes) + ' dos votos nacionais esperados.';
 }
 
+function setFirstRound(sharePct, sePp, prob) {
+  const fill = document.getElementById('frFill');
+  const ci = document.getElementById('frCi');
+  const has = sharePct !== null && sharePct !== undefined && !Number.isNaN(sharePct);
+  if (!has) {
+    fill.style.width = '0%';
+    ci.style.width = '0%';
+    document.getElementById('frShare').textContent = '—';
+    document.getElementById('frProb').textContent = '—';
+    document.getElementById('frSub').textContent = 'Aguardando apuração.';
+    return;
+  }
+  const se = (sePp === null || sePp === undefined || Number.isNaN(sePp)) ? 0 : sePp;
+  const lo = Math.max(0, sharePct - 1.96 * se), hi = Math.min(100, sharePct + 1.96 * se);
+  fill.style.width = sharePct + '%';
+  ci.style.left = lo + '%';
+  ci.style.width = (hi - lo) + '%';
+  const fmt = (v) => v.toFixed(1).replace('.', ',');
+  document.getElementById('frShare').textContent = 'Bolsonaro ' + fmt(sharePct) + '%';
+  const p = (prob === null || prob === undefined || Number.isNaN(prob)) ? null : prob;
+  document.getElementById('frProb').textContent = p === null ? '—'
+    : 'Vitória no 1º turno: ' + (p < 0.01 ? '<1%' : p > 0.99 ? '>99%' : Math.round(p * 100) + '%');
+  document.getElementById('frSub').textContent = 'IC 95%: ' + fmt(lo) + '% a ' + fmt(hi) + '% dos votos válidos.';
+}
+
 function applySnapshot(doc) {
   if (!doc) return;
   const lula2022 = doc.needle_lula_vs_2022;
@@ -553,6 +605,8 @@ function applySnapshot(doc) {
   setProbBlock('2022', doc.prob_lula_2022, doc.margin_projected_2022_pp, doc.margin_se_2022_pp, doc.dispersion_ratio_2022, doc.frac_votes_counted);
   setProbBlock('2018', doc.prob_lula_2018, doc.margin_projected_2018_pp, doc.margin_se_2018_pp, doc.dispersion_ratio_2018, doc.frac_votes_counted);
 
+  setFirstRound(doc.bolsonaro_share_projected_pct, doc.bolsonaro_share_se_pp, doc.prob_bolsonaro_first_round);
+
   document.getElementById('statMun').innerHTML = fmtInt(doc.n_municipios) + ' <span style="font-size:16px;color:var(--muted)">/ 5.570</span>';
   document.getElementById('statPct').textContent = (doc.pct_municipios ? doc.pct_municipios.toFixed(1) : '0') + '%';
   document.getElementById('statFracVotos').textContent = fmtPct01(doc.frac_votes_counted);
@@ -560,7 +614,7 @@ function applySnapshot(doc) {
 
   if (Array.isArray(doc.by_uf) && doc.by_uf.length > 0) {
     byUf2026Live = {};
-    doc.by_uf.forEach(r => { byUf2026Live[r.uf] = { lula: r.lula_2026, bolsonaro: r.bolsonaro_2026 }; });
+    doc.by_uf.forEach(r => { byUf2026Live[r.uf] = { lula: r.lula_2026, bolsonaro: r.bolsonaro_2026, pct_counted: r.pct_counted }; });
     document.getElementById('ufSectionNote').textContent = 'Comparando o 1º turno de 2022 com a apuração de 2026 em andamento, por estado.';
   }
   renderUfTable();
