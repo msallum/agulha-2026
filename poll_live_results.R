@@ -759,7 +759,17 @@ compute_needle_probability <- function(df_reporting, df_not_reporting, margin_sw
   # longer feeds the probability calc, that's now the MC layer below.
   df_t <- max(1, n_clusters_reporting - 1)
 
-  rem <- df_not_reporting %>%
+  # Votes still to come: every município with no results yet, PLUS the
+  # uncounted remainder of partially counted ones (2022 votes minus what's
+  # counted, zero once at 100%). Fixed 2026-10-04: the remainder used to be
+  # dropped, so a município reporting one section left the projection and
+  # the expected-vote denominator almost entirely (e.g. São Paulo city at
+  # 1% counted counted as done), roughly halving the expected total.
+  rep_remainder <- rep_valid %>%
+    mutate(turnout_2022 = ifelse(pct_secoes_apuradas >= 100, 0,
+                                 pmax(0, turnout_2022 - votos_validos_total_2026))) %>%
+    filter(turnout_2022 > 0)
+  rem <- bind_rows(df_not_reporting, rep_remainder) %>%
     filter(!is.na(turnout_2022), !is.na(.data[[margin_baseline_col]])) %>%
     mutate(cd_rgi_group = ifelse(is.na(cd_rgi), paste0("__no_rgi_", codigo_tse), cd_rgi))
 
