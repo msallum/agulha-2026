@@ -830,7 +830,13 @@ compute_needle_probability <- function(df_reporting, df_not_reporting, margin_sw
   w_over_total_sq_fallback <- if (projected_total_valid > 0) (fallback_groups$w_c / projected_total_valid)^2 else rep(0, nrow(fallback_groups))
   A_fallback <- sum(w_over_total_sq_fallback)
   B_fallback <- sum(safe_div(w_over_total_sq_fallback, fallback_groups$n_eff_c))
-  contrib_fallback_draws <- A_fallback / precision_global_draws + B_fallback * sigma2_within_draws
+  # Unreported regions: the global-mean error is shared by all of them, so it
+  # enters as (sum w/T)^2, and each region's own deviation from the global
+  # mean adds sigma2_between independently (fixed 2026-10-04: both were
+  # missing/understated, collapsing the SE once the global mean firmed up).
+  share_fallback <- if (projected_total_valid > 0) sum(fallback_groups$w_c) / projected_total_valid else 0
+  contrib_fallback_draws <- share_fallback^2 / precision_global_draws +
+    A_fallback * sigma2_between_draws + B_fallback * sigma2_within_draws
 
   remaining_margin_votes_draws <- baseline_term_fixed + term2_instats_draws + term2_fallback_fixed
   var_projection_draws <- pmax(contrib_instats_draws + contrib_fallback_draws, 0)
