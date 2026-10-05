@@ -676,6 +676,7 @@ K0_BETWEEN <- 15  # pseudo-count: ~15 reporting regiões before empirical BETWEE
 # factor of 2). To get SE itself 2x wider, the VARIANCE factor must be
 # 2^2 = 4.
 SE_INFLATION_FACTOR <- 2
+SYS_ERROR_K_PP <- 1.8  # calibrated on 2026-10-04 1st round; see compute_needle_probability()
 UNCERTAINTY_INFLATION_FACTOR <- SE_INFLATION_FACTOR^2  # = 4; applied to sigma2_within_blended/sigma2_between_blended below
 N_DRAWS_MC <- 2000
 
@@ -868,6 +869,14 @@ compute_needle_probability <- function(df_reporting, df_not_reporting, margin_sw
 
   remaining_margin_votes_draws <- baseline_term_fixed + term2_instats_draws + term2_fallback_fixed
   var_projection_draws <- pmax(contrib_instats_draws + contrib_fallback_draws, 0)
+  # Systematic reporting-order error: on 2026-10-04 the projection leaned
+  # toward Bolsonaro all night (late-counted votes were more pro-Lula than
+  # their region's swing predicted), with an error of ~1.8pp x sqrt(share
+  # still uncounted) -- 2-7x the sampling SE above, which never covered the
+  # final result. Added as independent variance; prior_scale converts it
+  # to share units for the single-candidate share projection.
+  frac_counted_now <- if (projected_total_valid > 0) known_valid_votes / projected_total_valid else 0
+  var_projection_draws <- var_projection_draws + prior_scale * (SYS_ERROR_K_PP / 100)^2 * max(0, 1 - frac_counted_now)
   projected_margin_share_draws <- if (projected_total_valid > 0)
     (known_margin_votes + remaining_margin_votes_draws) / projected_total_valid else rep(NA_real_, N_DRAWS_MC)
 
