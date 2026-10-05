@@ -201,7 +201,10 @@ repeat {
 
   if (run_result$ok && nzchar(POST_CYCLE_CMD)) {
     post_status <- system(POST_CYCLE_CMD)
-    if (post_status != 0) cat("!! post-cycle command failed with status", post_status, "\n")
+    if (post_status != 0) {
+      cat("!! post-cycle command failed with status", post_status, "\n")
+      note <- paste(note, "| post-cycle command failed with status", post_status)
+    }
   }
   # Recompute the tier with THIS cycle's fresh coverage (not the
   # possibly-stale value used to decide whether to even run this
