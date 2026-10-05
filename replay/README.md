@@ -104,3 +104,14 @@ That night the live município model was off by 1–3pp. The section model is a 
 - 2026 1st round (not used in the fit): 97%.
 - 2022 runoff, pivot base: 100%; previous-runoff base: 95%.
 - 2022 1st round: 80%; the misses are at 80–98% counted, where the residual lean outlasts the band.
+
+## Why the competitor is ahead on 2026 (data vs. model)
+
+- **Data: not the cause.** Our counted Lula share matches projecao.2026elections' within ±0.05pp at every checkpoint, so the gap is the model.
+- **Município effect: not the cause.** Projecting pending seções from their own profile only, as their method page describes, makes ours worse: +0.78 vs. +0.57 Lula-share error at 17:47.
+- **State-varying coefficients: most of the 2026 gap.** Their regression coefficients vary Brazil → região → UF; ours are national. `SectionModel.slope_prior_votes` (off by default) fits each região's, then each UF's, coefficients as a ridge toward the level above.
+  - **2026 1st round, at about 10,000 votes' worth of pull:** Lula-share error falls to +0.09 / +0.11 / +0.06 at 17:47 / 18:19 / 18:51, from +0.57 / +0.33 / +0.19.
+  - **2022 1st round, same settings:** margin error goes from +0.32 to +0.43–0.49 at 30–50% counted.
+  - **2022 runoff, fallback base:** stronger settings went down to −1.1pp at 2–5% counted (the two weakest crashed on this night, now fixed).
+  - **2022 runoff, pivot base:** mixed — better at 1–3% counted, slightly worse from 5–10%.
+- **Status:** not enabled. Choose the strength on all four nights jointly before using it.

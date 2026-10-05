@@ -87,6 +87,10 @@ class SectionModel:
         self.exp_valid = s.exp_valid.to_numpy(float)
         self.base_lr = base_lr
         self.exact_shift = True
+        # Off: região/UF-specific coefficients (ridge toward the parent, worth this many votes) closed most of the gap
+        # to projecao.2026elections on the 2026 1st round but hurt both 2022 nights (replay/README.md).
+        self.slope_prior_votes = None
+        self.mun_effects = True
 
     def _lr(self, v):
         """Log-ratios of an (n x 3) [pt, pl, outros] vote array."""
@@ -176,9 +180,31 @@ class SectionModel:
         sw = np.sqrt(wk)
         for j in range(y.shape[1]):
             beta = np.linalg.lstsq(Xk * sw[:, None], y[:, j] * sw, rcond=None)[0]
-            r = y[:, j] - Xk @ beta
-            pred = Xp @ beta
-            for lv, ug, ng in zip(self.levels, ugroups, self.n_levels):
+            if self.slope_prior_votes:
+                # Coefficients by região, then by UF, each a ridge toward its parent's: the parent counts as
+                # slope_prior_votes valid votes of the national design (X'WX scaled to that many votes).
+                XtWX = (Xk * wk[:, None]).T @ Xk
+                P = self.slope_prior_votes * XtWX / wk.sum()
+                b_unit = np.zeros((len(wk), len(beta)))
+                b_pend = np.zeros((pend.sum(), len(beta)))
+                b_unit[:], b_pend[:] = beta, beta
+                for lv, ug in ((self.levels[0], ugroups[0]), (self.levels[1], ugroups[1])):
+                    gk, gp = ug[keep], lv[pend]
+                    for gcode in np.unique(gk):
+                        m_ = gk == gcode
+                        parent = b_unit[m_][0]
+                        A = (Xk[m_] * wk[m_, None]).T @ Xk[m_] + P
+                        bg = np.linalg.lstsq(A, (Xk[m_] * wk[m_, None]).T @ y[m_, j] + P @ parent, rcond=None)[0]
+                        b_unit[m_] = bg
+                        b_pend[gp == gcode] = bg
+                r = y[:, j] - (Xk * b_unit).sum(axis=1)
+                pred = (Xp * b_pend).sum(axis=1)
+                levels = [(self.levels[2], ugroups[2], self.n_levels[2])] if self.mun_effects else []
+            else:
+                r = y[:, j] - Xk @ beta
+                pred = Xp @ beta
+                levels = list(zip(self.levels, ugroups, self.n_levels))
+            for lv, ug, ng in levels:
                 eff = eb_effects(r, wk, ug[keep], ng)
                 r = r - eff[ug[keep]]
                 pred = pred + eff[lv[pend]]
