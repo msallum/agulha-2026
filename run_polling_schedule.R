@@ -88,6 +88,7 @@ SUMMARY_JSON <- file.path(SCRIPT_DIR, "live_needle_summary_latest.json")
 POLLS_CLOSE_TIME <- as.POSIXct(Sys.getenv("POLLS_CLOSE_TIME", "2026-10-04 17:05:00"),
                                 tz = "America/Sao_Paulo")
 MAX_ITERATIONS <- as.numeric(Sys.getenv("MAX_ITERATIONS", Inf))
+RETRY_DELAY_SEC <- 15
 
 TIERS <- list(
   list(rank = 1, interval_min = 4,   label = "tier1_fast_ramp"),
@@ -158,12 +159,22 @@ repeat {
       if (is.na(last_frac_counted)) "unknown" else paste0(round(last_frac_counted * 100, 1), "%"),
       ") --- iteration", iteration, "---\n")
 
-  run_result <- tryCatch({
+  run_poll <- function() tryCatch({
     out <- system2(RSCRIPT_BIN, args = shQuote(POLL_SCRIPT), stdout = TRUE, stderr = TRUE)
     status_code <- attr(out, "status")
     if (!is.null(status_code) && status_code != 0) stop(paste("Rscript exited with status", status_code, "-- tail:", paste(tail(out, 5), collapse = " | ")))
     list(ok = TRUE, output = out)
   }, error = function(e) list(ok = FALSE, output = conditionMessage(e)))
+
+  run_result <- run_poll()
+  # One quick retry: on election night a single transient error (an SSL
+  # connect error fetching the municipality config) otherwise cost a full
+  # cycle of the cadence.
+  if (!run_result$ok) {
+    cat("!! poll failed, retrying once in", RETRY_DELAY_SEC, "s:", substr(run_result$output[1], 1, 200), "\n")
+    Sys.sleep(RETRY_DELAY_SEC)
+    run_result <- run_poll()
+  }
 
   frac_counted <- NA_real_
   status <- if (run_result$ok) "ok" else "error"
