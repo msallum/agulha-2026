@@ -52,6 +52,18 @@ def load(data_dir, target, base, turno):
     s["cd_rgi"] = s.cd_mun.map(dict(zip(clusters.codigo_tse.astype(int), clusters.cd_rgi)))
     mun_aptos = s.groupby("cd_mun").aptos.transform("sum")
     s["log_size"] = np.log(mun_aptos)
+    if s.recebido.isna().all():
+        # No arrival times (TSE files before 2018): proxy order from a later night's arrival rank of the same seção,
+        # else its município's median rank. Order is only partly stable between elections (2018 vs 2022 rank
+        # correlation 0.49 by seção, 0.56 by município), so these are "proxy-order" nights.
+        proxy = int(os.environ.get("PROXY_ORDER", "2018"))
+        p = pd.read_parquet(os.path.join(data_dir, f"secoes_{proxy}_{turno}t.parquet"))
+        p["rank"] = p.recebido.rank(pct=True)
+        k = ["uf", "cd_mun", "zona", "secao"]
+        s = s.merge(p[k + ["rank"]], on=k, how="left")
+        s["rank"] = s["rank"].fillna(s.cd_mun.map(p.groupby("cd_mun")["rank"].median())).fillna(0.5)
+        s["recebido"] = pd.Timestamp("2000-01-01 17:00") + pd.to_timedelta(s["rank"] * 4, unit="h")
+        print(f"{target} {turno}t: proxy arrival order from {proxy}")
     # Arrival order. Results are released at 17:00 (Brasília); BUs received earlier (abroad) count from then.
     day = s.recebido.dt.normalize().mode()[0]
     s["t"] = s.recebido.clip(lower=day + pd.Timedelta(hours=17))

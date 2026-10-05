@@ -21,10 +21,10 @@ REGIAO = {**dict.fromkeys(["AC", "AM", "AP", "PA", "RO", "RR", "TO"], "N"),
           **dict.fromkeys(["PR", "RS", "SC"], "S"), "ZZ": "ZZ"}
 
 # 90% band half-width = sqrt((Z90 * BOOT_SCALE * bootstrap_sd)^2 + (FLOOR_PP * share uncounted)^2), calibrated on
-# the 2022 replays of both rounds (replay/README.md).
+# 16 replayed nights, 2006-2026 (replay/tune.py, replay/README.md).
 Z90 = 1.645
-BOOT_SCALE = 1.0
-FLOOR_PP = 0.85
+BOOT_SCALE = 0.9
+FLOOR_PP = 1.45
 TURNOUT_PSEUDO_VOTES = 2000.0
 
 
@@ -87,9 +87,10 @@ class SectionModel:
         self.exp_valid = s.exp_valid.to_numpy(float)
         self.base_lr = base_lr
         self.exact_shift = True
-        # Off: região/UF-specific coefficients (ridge toward the parent, worth this many votes) closed most of the gap
-        # to projecao.2026elections on the 2026 1st round but hurt both 2022 nights (replay/README.md).
-        self.slope_prior_votes = None
+        # How regression coefficients vary by região and UF. "eb" (default): intercept and base-profile slopes shrunk
+        # toward the parent level by empirical Bayes, chosen across 16 replayed nights (replay/tune.py, README).
+        # A number: ridge toward the parent worth that many votes. None: national coefficients.
+        self.slope_prior_votes = "eb"
         self.mun_effects = True
 
     def _lr(self, v):
@@ -122,6 +123,43 @@ class SectionModel:
         for _ in range(n_iter):
             delta = delta + (target - agg_lr(delta))
         return delta
+
+    def _eb_slopes(self, Xk, wk, y, beta, ugroups, keep, pend, min_units=40):
+        """Intercept and base-profile slopes (the log-ratio covariates) by região, then by UF, shrunk toward the parent
+        level by empirical Bayes; the other coefficients stay national. Each group's deviation from its parent is a
+        small WLS of the parent's residual on [1, base log-ratios], with sampling variance s2 * diag((X'WX)^-1); the
+        between-group variance of each term, t_k, is the excess spread of those deviations over their sampling
+        variance, and each deviation is kept in proportion t_k / (t_k + v_gk). So the data decide, each night, how much
+        the swing pattern differs by place: a realignment pulls the groups apart, an ordinary night keeps them national.
+        """
+        cols = [0] + list(range(4, 4 + self.base_lr.shape[1]))
+        b_unit = np.tile(beta, (len(wk), 1))
+        b_pend = np.tile(beta, (pend.sum(), 1))
+        for lv, ug in ((self.levels[0], ugroups[0]), (self.levels[1], ugroups[1])):
+            gk, gp = ug[keep], lv[pend]
+            res_parent = y - (Xk * b_unit).sum(axis=1)
+            est, var, members = [], [], []
+            for gcode in np.unique(gk):
+                m_ = gk == gcode
+                if m_.sum() < min_units:
+                    continue
+                Zg, wg, rg = Xk[m_][:, cols], wk[m_], res_parent[m_]
+                A = (Zg * wg[:, None]).T @ Zg
+                d = np.linalg.lstsq(A, (Zg * wg[:, None]).T @ rg, rcond=None)[0]
+                s2 = (wg * (rg - Zg @ d) ** 2).sum() / max(1, m_.sum() - len(cols))
+                est.append(d); var.append(s2 * np.diag(np.linalg.pinv(A))); members.append(gcode)
+            if len(est) < 3:
+                continue
+            est, var = np.array(est), np.array(var)
+            t = np.maximum(0.0, (est ** 2).mean(axis=0) - var.mean(axis=0))
+            for gcode, d, v in zip(members, est, var):
+                m_ = gk == gcode
+                shrink = np.where(t > 0, t / (t + np.maximum(v, 1e-12)), 0.0)
+                bg = b_unit[m_][0].copy()
+                bg[cols] += shrink * d
+                b_unit[m_] = bg
+                b_pend[gp == gcode] = bg
+        return b_unit, b_pend
 
     def project(self, unit_of, unit_votes, unit_mult=None, unit_frac=None, detail=False, beta_within=None,
                 unit_fit=None):
@@ -181,25 +219,31 @@ class SectionModel:
         for j in range(y.shape[1]):
             beta = np.linalg.lstsq(Xk * sw[:, None], y[:, j] * sw, rcond=None)[0]
             if self.slope_prior_votes:
-                # Coefficients by região, then by UF, each a ridge toward its parent's: the parent counts as
-                # slope_prior_votes valid votes of the national design (X'WX scaled to that many votes).
-                XtWX = (Xk * wk[:, None]).T @ Xk
-                P = self.slope_prior_votes * XtWX / wk.sum()
-                b_unit = np.zeros((len(wk), len(beta)))
-                b_pend = np.zeros((pend.sum(), len(beta)))
-                b_unit[:], b_pend[:] = beta, beta
-                for lv, ug in ((self.levels[0], ugroups[0]), (self.levels[1], ugroups[1])):
-                    gk, gp = ug[keep], lv[pend]
-                    for gcode in np.unique(gk):
-                        m_ = gk == gcode
-                        parent = b_unit[m_][0]
-                        A = (Xk[m_] * wk[m_, None]).T @ Xk[m_] + P
-                        bg = np.linalg.lstsq(A, (Xk[m_] * wk[m_, None]).T @ y[m_, j] + P @ parent, rcond=None)[0]
-                        b_unit[m_] = bg
-                        b_pend[gp == gcode] = bg
+                if self.slope_prior_votes == "eb":
+                    b_unit, b_pend = self._eb_slopes(Xk, wk, y[:, j], beta, ugroups, keep, pend)
+                else:
+                    # Coefficients by região, then by UF, each a ridge toward its parent's: the parent counts as
+                    # slope_prior_votes valid votes of the national design (X'WX scaled to that many votes).
+                    XtWX = (Xk * wk[:, None]).T @ Xk
+                    P = self.slope_prior_votes * XtWX / wk.sum()
+                    P[0, :] = P[:, 0] = 0  # intercepts are free by group; only slopes are pulled toward the parent
+                    b_unit = np.zeros((len(wk), len(beta)))
+                    b_pend = np.zeros((pend.sum(), len(beta)))
+                    b_unit[:], b_pend[:] = beta, beta
+                    for lv, ug in ((self.levels[0], ugroups[0]), (self.levels[1], ugroups[1])):
+                        gk, gp = ug[keep], lv[pend]
+                        for gcode in np.unique(gk):
+                            m_ = gk == gcode
+                            parent = b_unit[m_][0]
+                            A = (Xk[m_] * wk[m_, None]).T @ Xk[m_] + P
+                            bg = np.linalg.lstsq(A, (Xk[m_] * wk[m_, None]).T @ y[m_, j] + P @ parent, rcond=None)[0]
+                            b_unit[m_] = bg
+                            b_pend[gp == gcode] = bg
                 r = y[:, j] - (Xk * b_unit).sum(axis=1)
                 pred = (Xp * b_pend).sum(axis=1)
-                levels = [(self.levels[2], ugroups[2], self.n_levels[2])] if self.mun_effects else []
+                levels = list(zip(self.levels, ugroups, self.n_levels))
+                if not self.mun_effects:
+                    levels = levels[:2]
             else:
                 r = y[:, j] - Xk @ beta
                 pred = Xp @ beta

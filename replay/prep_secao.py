@@ -4,7 +4,8 @@ Usage: python3 replay/prep_secao.py <dir> <year> <pt_number> <right_number> <out
   <dir> holds votacao_secao_{year}_{UF}.zip (all UFs) and detalhe_votacao_secao_{year}.zip.
 Writes <out_dir>/secoes_{year}_{turno}t.parquet with the same vote columns as prep_bweb.py (pt, pl = the
 Bolsonaro-lineage candidate, outros, brancos, nulos) plus aptos, comparecimento, local name and address, and
-the TSE receipt / first-totalization timestamps from the detalhe file. Used for the base election (2018).
+the TSE receipt / first-totalization timestamps from the detalhe file (2018 on; earlier files have no timestamps,
+names or addresses, left empty). Used for base elections and, from 2018, as a replay night.
 """
 import csv
 import glob
@@ -61,10 +62,10 @@ def main():
                 if v is None:
                     continue
                 rows.append(dict(turno=key[0], uf=key[1], cd_mun=key[2], nm_mun=r["NM_MUNICIPIO"], zona=key[3],
-                                 secao=key[4], local=int(r["NR_LOCAL_VOTACAO"]), nm_local=r["NM_LOCAL_VOTACAO"],
-                                 endereco=r["DS_LOCAL_VOTACAO_ENDERECO"], aptos=int(r["QT_APTOS"]),
-                                 comparecimento=int(r["QT_COMPARECIMENTO"]), recebido=r["DT_RECEBIMENTO_BU_HOR_TSE"],
-                                 totalizado=r["DT_PRIM_TOT_PARCIAL_HOR_TSE"],
+                                 secao=key[4], local=int(r["NR_LOCAL_VOTACAO"]), nm_local=r.get("NM_LOCAL_VOTACAO"),
+                                 endereco=r.get("DS_LOCAL_VOTACAO_ENDERECO"), aptos=int(r["QT_APTOS"]),
+                                 comparecimento=int(r["QT_COMPARECIMENTO"]), recebido=r.get("DT_RECEBIMENTO_BU_HOR_TSE"),
+                                 totalizado=r.get("DT_PRIM_TOT_PARCIAL_HOR_TSE"),
                                  pt=v[0], pl=v[1], outros=v[2], brancos=v[3], nulos=v[4]))
     df = pd.DataFrame(rows)
     for c in ("recebido", "totalizado"):

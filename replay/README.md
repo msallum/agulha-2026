@@ -115,3 +115,55 @@ That night the live município model was off by 1–3pp. The section model is a 
   - **2022 runoff, fallback base:** stronger settings went down to −1.1pp at 2–5% counted (the two weakest crashed on this night, now fixed).
   - **2022 runoff, pivot base:** mixed — better at 1–3% counted, slightly worse from 5–10%.
 - **Status:** not enabled. Choose the strength on all four nights jointly before using it.
+
+## More nights, and tuning across all of them (`tune.py`)
+
+**Nights.** 16 replays, all in the live município-unit mode.
+
+- **True arrival order (7 nights):** 2026 1t (our 4 Oct snapshots); 2022 1t; 2022 runoff with the pivot base (`p`) and with the previous-runoff base; 2018 1t; 2018 runoff, pivot and previous-runoff bases.
+- **Bases and match rates:** 2022 nights use 2018 as base. 2018 uses 2014 (`prep_secao.py`, PT 13 vs. PSDB 45 as the right-of-PT lineage), with only 80.5% of valid votes matched to a 2014 polling place. 2018 is the realignment stress test: Bolsonaro (PSL) against an Aécio (PSDB) base.
+- **Proxy arrival order (9 nights):** 2014, 2010 and 2006, each 1t plus runoff with both bases, using bases 2010, 2006 and 2002. TSE's files before 2018 have no arrival times, so each seção takes the 2018 arrival rank of the same seção, else its município's median (`replay.load`). Order is only partly stable between elections: rank correlation 0.49 by seção and 0.56 by município, 2018 vs. 2022. These nights count half in the scores.
+- All 2002–2014 tables reproduce the official results: Lula 46.44 / 61.27 (2002), 48.60 / 60.83 (2006); Dilma 46.91 / 56.05 (2010), 41.59 / 51.64 (2014).
+
+**Configurations.** They differ in how regression coefficients may vary by região and UF:
+- `national` — one set of coefficients for the whole country;
+- fixed ridges toward the parent level (`uf_*`, the number is the prior's weight in votes);
+- `eb` — only the intercept and the base log-ratio slopes vary by group, each shrunk toward the level above by empirical Bayes. The between-group variance is estimated from the count so far, so the data decide how much they vary each night.
+
+Mean |margin error| (pp), checkpoints 2–90% of seções:
+
+| night | national | eb | uf_1e5 | uf_1e4 |
+|---|---:|---:|---:|---:|
+| 2026 1t | 0.54 | 0.24 | 0.35 | 0.21 |
+| 2022 1t | 0.34 | 0.29 | 0.38 | 0.37 |
+| 2022 2t pivot | 0.14 | 0.14 | 0.21 | 0.22 |
+| 2022 2t prev. runoff | 0.30 | 0.41 | 0.27 | 0.27 |
+| 2018 1t | 1.88 | 1.54 | 1.55 | 1.37 |
+| 2018 2t pivot | 0.91 | 0.49 | 0.58 | 0.40 |
+| 2018 2t prev. runoff | 3.15 | 3.03 | 2.75 | 2.68 |
+| 2014 1t (proxy) | 0.60 | 1.03 | 1.02 | 1.09 |
+| 2014 2t pivot (proxy) | 0.12 | 0.36 | 0.26 | 0.22 |
+| 2014 2t prev. (proxy) | 0.38 | 0.59 | 0.41 | 0.50 |
+| 2010 1t (proxy) | 0.71 | 0.35 | 0.39 | 0.45 |
+| 2010 2t pivot (proxy) | 0.07 | 0.12 | 0.19 | 0.23 |
+| 2010 2t prev. (proxy) | 0.61 | 0.51 | 0.39 | 0.53 |
+| 2006 1t (proxy) | 1.96 | 1.36 | 2.39 | 2.30 |
+| 2006 2t pivot (proxy) | 0.20 | 0.28 | 0.23 | 0.21 |
+| 2006 2t prev. (proxy) | 1.22 | 0.78 | 1.25 | 1.52 |
+| **weighted mean** | 0.885 | **0.767** | 0.815 | 0.786 |
+| true-order nights | 1.035 | 0.876 | 0.871 | 0.788 |
+| proxy nights | 0.653 | **0.599** | 0.727 | 0.783 |
+
+**Choice.** `eb` has the best weighted score. It beats national coefficients on 10 of 16 nights, and, unlike any fixed ridge, it improves both the true-order and the proxy nights. It is the default since this commit. Fixed ridges help on realignment nights (2018, 2026) but hurt on ordinary ones (2014, 2022 1t). Its weak spots:
+- 2014 is worse;
+- the pivot runoffs on ordinary nights are a few tenths worse (2014, 2010, 2006);
+- the early count is more volatile: the largest single-checkpoint error rises on some nights, e.g. 2014 1t from 1.7 to 3.4pp.
+
+The first replay of `eb` let every coefficient vary by group and was unstable (errors up to 12pp). Restricting variation to the intercept and the base log-ratios, with at least 40 municípios per group, fixed that.
+
+The pivot base remains the strongest single feature for the runoff. On all five replayed runoffs it beats the previous-runoff base, often by a wide margin (2018: 0.49 vs. 3.03pp with `eb`).
+
+**Band, recalibrated on all 16 nights with `eb`** (`TUNE_BOOT=30`). The half-width is `sqrt((1.645 * 0.9 * bootstrap_sd)^2 + (1.45pp * share uncounted)^2)` (`BOOT_SCALE`, `FLOOR_PP`). Weighted coverage of the final margin is 90% at checkpoints from 1% counted; the earlier constants gave 83%.
+- Fully covered: every night from 2010 and 2006, 2014 runoff, 2022 runoff (both bases), 2026 1t, 2018 runoff (pivot).
+- 2022 1t: 93%. 2014 1t: 80%. 2018 1t: 67%.
+- 2018 runoff, previous-runoff base: 40%. Its errors of about 3pp come from realignment against an Aécio (PSDB) base, which no reasonable band absorbs.
