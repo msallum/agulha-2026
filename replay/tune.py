@@ -17,9 +17,14 @@ import pandas as pd
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import replay as R  # noqa: E402
-from section_model import SectionModel  # noqa: E402
+from section_model import SectionModel, demo_covariates  # noqa: E402
 
-CONFIGS = {"national": None, "eb": "eb", "uf_3e5": 3e5, "uf_1e5": 1e5, "uf_3e4": 3e4, "uf_1e4": 1e4}
+CONFIGS = {"national": None, "eb": "eb", "uf_3e5": 3e5, "uf_1e5": 1e5, "uf_3e4": 3e4, "uf_1e4": 1e4,
+           "national+demo": None, "eb+demo": "eb", "uf_1e4+demo": 1e4}
+# "+demoR<votes>": demographic covariates with a ridge prior toward zero worth that many votes
+for k_, v_ in (("national", None), ("eb", "eb"), ("uf_1e4", 1e4)):
+    for r_ in ("1e6", "3e6", "1e7", "3e7"):
+        CONFIGS[f"{k_}+demoR{r_}"] = v_
 if os.environ.get("TUNE_CONFIGS"):
     CONFIGS = {k: v for k, v in CONFIGS.items() if k in os.environ["TUNE_CONFIGS"].split(",")}
 PCTS = [1, 2, 3, 5, 7.5, 10, 15, 20, 30, 40, 50, 60, 70, 80, 90]
@@ -87,9 +92,17 @@ def main():
     data_dir = sys.argv[1]
     for night in sys.argv[2:]:
         s, extra, turno, cps, truth = night_inputs(data_dir, night)
+        demo = None
+        if any("+demo" in c for c in CONFIGS):
+            perfil = pd.read_parquet(os.path.join(data_dir, f"perfil_{night[:4]}.parquet"))
+            demo = demo_covariates(s, perfil)
         rows = []
         for name, kappa in CONFIGS.items():
-            m = SectionModel(s, turno, extra_X=extra)
+            dx, dprior = None, None
+            if "+demo" in name:
+                dx = demo
+                dprior = float(name.split("+demoR")[1]) if "+demoR" in name else None
+            m = SectionModel(s, turno, extra_X=extra, demo_X=dx, demo_prior_votes=dprior)
             m.slope_prior_votes = kappa
             n_boot = int(os.environ.get("TUNE_BOOT", "0"))
             for p, u, v in cps:

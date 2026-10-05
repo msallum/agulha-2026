@@ -167,3 +167,48 @@ The pivot base remains the strongest single feature for the runoff. On all five 
 - Fully covered: every night from 2010 and 2006, 2014 runoff, 2022 runoff (both bases), 2026 1t, 2018 runoff (pivot).
 - 2022 1t: 93%. 2014 1t: 80%. 2018 1t: 67%.
 - 2018 runoff, previous-runoff base: 40%. Its errors of about 3pp come from realignment against an Aécio (PSDB) base, which no reasonable band absorbs.
+
+## How much rests on the pre-2018 nights, and demographic covariates
+
+**Dependence on 2006–2014.** Mean |margin error| (pp, 2–90% counted):
+
+| nights scored | national | eb | uf_1e4 |
+|---|---:|---:|---:|
+| all 16 (pre-2018 counted ½) | 0.885 | **0.767** | 0.786 |
+| 2018 on (7) | 1.035 | 0.876 | **0.788** |
+| 2022 on (4) | 0.327 | 0.268 | **0.267** |
+
+State-varying coefficients beat national ones however the nights are chosen. The choice between `eb` and a fixed ridge rested on the proxy-order 2006–2014 nights: from 2018 on, the fixed ridge (κ = 1e4) is better, and on 2022+ they tie.
+
+The band depends more on 2018 than on the older nights:
+- 2022+ alone would allow a band about a third as wide;
+- 2018+ needs a wider one, because of the two 2018 realignment nights.
+
+Since the earlier elections are less relevant, the choices below are made on the 2018–2026 nights only.
+
+**Demographic covariates.** TSE's `perfil_eleitor_secao` gives each seção's electorate by sex, age band and education (`prep_perfil.py`, 2018 / 2022 / 2026). From it, six shares become extra swing covariates (`section_model.DEMO_COLS`, `demo_covariates`):
+- women;
+- ages 16–24, 25–39 and 60+;
+- low education (illiterate to incomplete primary);
+- higher education (some college or more).
+
+| config | 2018+ (7) | 2022+ (4) |
+|---|---:|---:|
+| national | 1.035 | 0.327 |
+| national + demographics | 1.178 | 0.770 |
+| eb | 0.876 | 0.268 |
+| eb + demographics, zero-slope prior worth 1e7 votes | 0.834 | 0.196 |
+| uf_1e4 | 0.788 | 0.267 |
+| **uf_1e4 + demographics** | **0.715** | **0.174** |
+
+- **Late count.** From about 15% counted, demographics remove the late pro-Lula lean almost entirely. This is the within-city effect seen before: the seções a city reports late differ demographically from its early ones.
+- **Early count, national coefficients.** With national (or `eb`) coefficients they blow up in the first 1–10% (−3.6 to −5.6pp at 1%), because six slopes are estimated from a few unrepresentative municípios. A ridge prior toward zero (`demo_prior_votes`) helps but does not fully fix it.
+- **Early count, state coefficients.** With state coefficients the demographic slopes are estimated within each UF, which stabilizes them; the prior then barely matters.
+- **Per night.** `uf_1e4` + demographics improves 6 of 7 nights; 2018 1t is the exception (1.37 → 1.57). Its worst early checkpoint is sometimes larger, e.g. 2022 runoff on the previous-runoff base: 1.29 vs. 0.57pp.
+- **Status.** This is now the default: `slope_prior_votes = 1e4`, with `live_section_model.py` reading the 2026 profile from `section_base_2026.csv.gz`.
+- **Example.** On the 4 Oct snapshot at 18:44 (41% counted) the live module gives Lula 45.12 / Bolsonaro 47.03, margin −1.90, against the final 45.16 / 47.03 / −1.87.
+
+**Band for this default** (bootstrap, 2018–2026 nights only): half-width `sqrt((1.645 * 1.45 * bootstrap_sd)^2 + (0.5pp * share uncounted)^2)`. It covers 90.5% of checkpoints from 1% counted:
+- 100% on 2026 and on the 2022 runoffs;
+- 93% on the 2022 1t;
+- 67–73% on the two 2018 realignment nights.

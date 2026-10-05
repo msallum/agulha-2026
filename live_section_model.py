@@ -24,7 +24,7 @@ from math import erf, sqrt
 import numpy as np
 import pandas as pd
 
-from section_model import SectionModel, apply_pivot
+from section_model import DEMO_COLS, SectionModel, apply_pivot, demo_covariates
 
 ROUND = int(os.environ.get("ROUND", "1"))
 SECTION_BASE = os.environ.get("SECTION_BASE", "section_base_2026.csv.gz")
@@ -169,7 +169,10 @@ def main():
     unit_fit = np.r_[ident_mun >= MIN_IDENTIFIED, np.zeros(len(others), bool)]
     if (unit_fit & (votes.sum(axis=1) > 0)).sum() < 50:
         unit_fit = None
-    model = SectionModel(s, ROUND, extra_X=extra)
+    demo = None
+    if set(DEMO_COLS) <= set(s.columns):  # electorate profile of each seção (sex, age, education)
+        demo = demo_covariates(s, s[["uf", "cd_mun", "zona", "secao", "eleitores_perfil", *DEMO_COLS]].dropna())
+    model = SectionModel(s, ROUND, extra_X=extra, demo_X=demo)
     p = model.project_with_band(unit_of, votes, unit_frac=frac, unit_mun=np.arange(len(votes)), n_boot=N_BOOT,
                                 unit_fit=unit_fit)
     detail = model.project(unit_of, votes, unit_frac=frac, detail=True, unit_fit=unit_fit)

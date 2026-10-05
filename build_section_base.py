@@ -16,7 +16,8 @@ Match cascade, per 2026 polling place (município, zona, local number):
            (new municípios, new cities abroad)
 Output: one row per 2026 principal seção with its electorate (aggregated seções folded in), the match type, the 2022
 1st-round (b1_*) and runoff (b2_*) votes of the matched place, the seção's 2026 1st-round turnout and valid votes
-(n1_comparecimento, n1_valid, from the detalhe file) and, once published, its 2026 1st-round votes (r1_*).
+(n1_comparecimento, n1_valid, from the detalhe file), its electorate profile (section_model.DEMO_COLS, from
+<data_dir>/perfil_2026.parquet, replay/prep_perfil.py) and, once published, its 2026 1st-round votes (r1_*).
 """
 import csv
 import io
@@ -30,7 +31,7 @@ import zipfile
 import numpy as np
 import pandas as pd
 
-from section_model import fit_pivot
+from section_model import DEMO_COLS, fit_pivot
 
 KEY = ["uf", "cd_mun", "zona", "local"]
 COLS = {"SG_UF": "uf", "CD_MUNICIPIO": "cd_mun", "NR_ZONA": "zona", "NR_SECAO": "secao", "NR_LOCAL_VOTACAO": "local",
@@ -166,6 +167,14 @@ def main():
                    "note": "section_model.pivot_features -> runoff log(PT/PL), fitted per election on seções"},
                   open(pivot_path, "w"), indent=1)
         print(f"wrote {pivot_path}")
+
+    perfil = os.path.join(data_dir, "perfil_2026.parquet")  # replay/prep_perfil.py: electorate profile per seção
+    if os.path.exists(perfil):
+        p = pd.read_parquet(perfil)
+        sec = sec.merge(p[["uf", "cd_mun", "zona", "secao", "eleitores_perfil", *DEMO_COLS]],
+                        on=["uf", "cd_mun", "zona", "secao"], how="left")
+        for c in DEMO_COLS:
+            sec[c] = sec[c].round(4)
 
     first = os.path.join(data_dir, "secoes_2026_1t.parquet")
     if os.path.exists(first):

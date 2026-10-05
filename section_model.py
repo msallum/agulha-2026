@@ -21,10 +21,10 @@ REGIAO = {**dict.fromkeys(["AC", "AM", "AP", "PA", "RO", "RR", "TO"], "N"),
           **dict.fromkeys(["PR", "RS", "SC"], "S"), "ZZ": "ZZ"}
 
 # 90% band half-width = sqrt((Z90 * BOOT_SCALE * bootstrap_sd)^2 + (FLOOR_PP * share uncounted)^2), calibrated on
-# 16 replayed nights, 2006-2026 (replay/tune.py, replay/README.md).
+# the 2018-2026 replays (7 nights, replay/tune.py, replay/README.md).
 Z90 = 1.645
-BOOT_SCALE = 0.9
-FLOOR_PP = 1.45
+BOOT_SCALE = 1.45
+FLOOR_PP = 0.5
 TURNOUT_PSEUDO_VOTES = 2000.0
 
 
@@ -67,7 +67,7 @@ class SectionModel:
     (expected valid votes) and log_size (log of the município's electorate). turno: 1 or 2. extra_X: optional
     (n_sections x k) extra covariates, e.g. the previous runoff's log-ratio when the base is a first-round pivot."""
 
-    def __init__(self, sections, turno, extra_X=None):
+    def __init__(self, sections, turno, extra_X=None, demo_X=None, demo_prior_votes=None):
         s = sections.reset_index(drop=True)
         self.n = len(s)
         self.turno = turno
@@ -79,6 +79,13 @@ class SectionModel:
         cols = [np.ones(self.n), s.b_pt / tot, s.b_pl / tot, s.log_size - s.log_size.mean(), base_lr]
         if extra_X is not None:
             cols.append(np.asarray(extra_X, float).reshape(self.n, -1))
+        n_before = sum(1 if np.ndim(c) == 1 else c.shape[1] for c in cols)
+        self.demo_idx = []
+        if demo_X is not None:  # demographic covariates (demo_covariates), with a ridge prior toward no effect
+            demo_X = np.asarray(demo_X, float).reshape(self.n, -1)
+            cols.append(demo_X)
+            self.demo_idx = list(range(n_before, n_before + demo_X.shape[1]))
+        self.demo_prior_votes = demo_prior_votes
         self.X = np.column_stack(cols)
         self.levels = [pd.factorize(s.uf.map(REGIAO).fillna("ZZ"))[0], pd.factorize(s.uf)[0], pd.factorize(s.cd_mun)[0]]
         self.n_levels = [lv.max() + 1 for lv in self.levels]
@@ -87,10 +94,11 @@ class SectionModel:
         self.exp_valid = s.exp_valid.to_numpy(float)
         self.base_lr = base_lr
         self.exact_shift = True
-        # How regression coefficients vary by região and UF. "eb" (default): intercept and base-profile slopes shrunk
-        # toward the parent level by empirical Bayes, chosen across 16 replayed nights (replay/tune.py, README).
-        # A number: ridge toward the parent worth that many votes. None: national coefficients.
-        self.slope_prior_votes = "eb"
+        # How regression coefficients vary by região and UF. A number (default 1e4): each região's, then each UF's
+        # coefficients are a ridge toward the level above worth that many votes (intercepts free). "eb": intercept and
+        # base-profile slopes shrunk by empirical Bayes. None: national coefficients. Chosen on the 2018-2026 replays
+        # together with the demographic covariates (replay/tune.py, replay/README.md).
+        self.slope_prior_votes = 1e4
         self.mun_effects = True
 
     def _lr(self, v):
@@ -216,8 +224,19 @@ class SectionModel:
         Xp = self.X[pend]
         swing = np.zeros((pend.sum(), y.shape[1]))
         sw = np.sqrt(wk)
+        ridge = None
+        if self.demo_idx and self.demo_prior_votes:
+            # Demographic slopes start at zero and are worth demo_prior_votes votes of evidence: unrepresentative
+            # early municípios cannot swing them, while late in the count they are free (replay/README.md).
+            XtWX = (Xk * wk[:, None]).T @ Xk
+            ridge = np.zeros_like(XtWX)
+            di = np.array(self.demo_idx)
+            ridge[np.ix_(di, di)] = self.demo_prior_votes * XtWX[np.ix_(di, di)] / wk.sum()
         for j in range(y.shape[1]):
-            beta = np.linalg.lstsq(Xk * sw[:, None], y[:, j] * sw, rcond=None)[0]
+            if ridge is None:
+                beta = np.linalg.lstsq(Xk * sw[:, None], y[:, j] * sw, rcond=None)[0]
+            else:
+                beta = np.linalg.lstsq(XtWX + ridge, (Xk * wk[:, None]).T @ y[:, j], rcond=None)[0]
             if self.slope_prior_votes:
                 if self.slope_prior_votes == "eb":
                     b_unit, b_pend = self._eb_slopes(Xk, wk, y[:, j], beta, ugroups, keep, pend)
@@ -315,6 +334,21 @@ class SectionModel:
 
 # ---------------------------------------------------------------- runoff pivot (first round -> runoff transfer)
 PIVOT_REGIOES = ["N", "NE", "CO", "S", "ZZ"]
+DEMO_COLS = ["fem", "a16_24", "a25_39", "a60p", "edu_low", "edu_high"]
+
+
+def demo_covariates(sections, perfil):
+    """(n_sections x 6) electorate-profile shares (DEMO_COLS, replay/prep_perfil.py) for each seção, centered; a seção
+    missing from the profile file takes its município's electorate-weighted mean, then the national one."""
+    k = ["uf", "cd_mun", "zona", "secao"]
+    d = sections[k].merge(perfil[k + DEMO_COLS + ["eleitores_perfil"]], on=k, how="left")
+    w = perfil.eleitores_perfil
+    for c in DEMO_COLS:
+        mun = (perfil[c] * w).groupby(perfil.cd_mun).sum() / w.groupby(perfil.cd_mun).sum()
+        nat = (perfil[c] * w).sum() / w.sum()
+        d[c] = d[c].fillna(d.cd_mun.map(mun)).fillna(nat)
+    X = d[DEMO_COLS].to_numpy(float)
+    return X - X.mean(axis=0)
 
 
 def pivot_features(pt1, pl1, o1, uf):
