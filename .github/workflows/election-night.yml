@@ -3,6 +3,11 @@ name: Election night
 on:
   workflow_dispatch:
     inputs:
+      round:
+        description: "Election round (1 = first round, 2 = runoff)"
+        type: choice
+        options: ["2", "1"]
+        default: "2"
       use_simulado:
         description: "Poll TSE's rehearsal environment (simulado) instead of the real results"
         type: boolean
@@ -42,6 +47,7 @@ jobs:
       - name: Poll TSE and publish after every cycle
         env:
           GH_TOKEN: ${{ github.token }}
+          ROUND: ${{ inputs.round }}
           USE_SIMULADO: ${{ inputs.use_simulado && 'TRUE' || 'FALSE' }}
           POST_CYCLE_CMD: bash scripts/publish.sh
           DATA_DIR: live-data

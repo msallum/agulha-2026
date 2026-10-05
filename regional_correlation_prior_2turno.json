@@ -1,0 +1,9 @@
+{
+  "prior_sigma2_between_rgi": 0.012837484701910064,
+  "prior_sigma2_within_rgi": 0.0015544260456854537,
+  "prior_rho_rgi": 0.8919930735434033,
+  "n_clusters_used": 510,
+  "n_municipios_used": 5570,
+  "built": "2026-10-05 14:38:48",
+  "note": "Weighted one-way ANOVA decomposition of the 2018->2022 munic\u00edpio-level RUNOFF margin swing, by IBGE regiao imediata (CD_RGI). Runoff counterpart of regional_correlation_prior.json."
+}

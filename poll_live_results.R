@@ -72,6 +72,15 @@ if (use_simulado) {
   ELECTION_CODE <- NULL  # discovered below
 }
 
+# ROUND=2 switches to the runoff: its election code (the first round's
+# `cdt2` in TSE's catalog), the 2018/2022 RUNOFF baseline and the runoff
+# regional prior (both built by build_runoff_baseline.py).
+ROUND <- as.integer(Sys.getenv("ROUND", "1"))
+stopifnot(ROUND %in% c(1, 2))
+BASELINE_FILE <- if (ROUND == 2) "historical_baseline_municipio_2turno.csv" else "historical_baseline_municipio.csv"
+PRIOR_FILE <- if (ROUND == 2) "regional_correlation_prior_2turno.json" else "regional_correlation_prior.json"
+if (nzchar(Sys.getenv("ELECTION_CODE"))) ELECTION_CODE <- Sys.getenv("ELECTION_CODE")
+
 # ---------------------------------------------------------------------
 # 1. Discover the real election code (production only -- the simulado
 #    uses a fixed known code). Searches TSE's own master election
@@ -115,7 +124,8 @@ discover_election_code <- function() {
 if (is.null(ELECTION_CODE)) {
   found <- discover_election_code()
   # Prefer an entry explicitly scoped to "br" (national) and round 1
-  ELECTION_CODE <- found %>% filter(t == "1") %>% slice(1) %>% pull(cd)
+  first_round <- found %>% filter(t == "1") %>% slice(1)
+  ELECTION_CODE <- if (ROUND == 2) first_round$cdt2 else first_round$cd
   cat("Using election code:", ELECTION_CODE, "\n")
 }
 
@@ -422,7 +432,7 @@ t_join_start <- Sys.time()
 #    known turnout_2022 -- needed for the projection in step 6, which
 #    must account for every município, reporting or not.
 # ---------------------------------------------------------------------
-baseline <- read_csv(file.path(OUT_DIR, "historical_baseline_municipio.csv"), col_types = cols(.default = "c")) %>%
+baseline <- read_csv(file.path(OUT_DIR, BASELINE_FILE), col_types = cols(.default = "c")) %>%
   mutate(share = as.numeric(share), votos_validos_total = as.numeric(votos_validos_total))
 
 # PT lineage: Haddad ran in 2018 (Lula was barred that year), Lula ran
@@ -632,7 +642,7 @@ by_uf <- if (nrow(reporting) > 0) {
 #    prior; (iii) still only models the Lula-vs-Bolsonaro-lineage horse
 #    race, not a formal >50% outright-win threshold.
 # ---------------------------------------------------------------------
-regional_prior <- fromJSON(file.path(OUT_DIR, "regional_correlation_prior.json"))
+regional_prior <- fromJSON(file.path(OUT_DIR, PRIOR_FILE))
 PRIOR_SIGMA2_WITHIN_RGI <- regional_prior$prior_sigma2_within_rgi
 PRIOR_SIGMA2_BETWEEN_RGI <- regional_prior$prior_sigma2_between_rgi
 PRIOR_STRENGTH_K0 <- 30  # pseudo-count: ~30 "effective" (vote-weighted, Kish) reporting municípios before empirical WITHIN-região dispersion outweighs the 2018->2022 historical prior
@@ -928,6 +938,7 @@ mark_timing("5_model_estimation", t_model_start)
 t_write_start <- Sys.time()
 
 summary_out <- list(
+  round = ROUND,
   status = "live",
   updated_at = format(Sys.time(), "%Y-%m-%dT%H:%M:%OS3Z", tz = "UTC"),
   n_municipios = nrow(reporting),

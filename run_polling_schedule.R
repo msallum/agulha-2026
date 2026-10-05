@@ -85,7 +85,8 @@ SUMMARY_JSON <- file.path(SCRIPT_DIR, "live_needle_summary_latest.json")
 # watching this election is likely configured to start at the exact
 # stroke of 17h -- a deliberate 5-minute offset avoids piling onto TSE's
 # servers in that same first instant.
-POLLS_CLOSE_TIME <- as.POSIXct(Sys.getenv("POLLS_CLOSE_TIME", "2026-10-04 17:05:00"),
+DEFAULT_POLLS_CLOSE <- if (Sys.getenv("ROUND", "1") == "2") "2026-10-25 17:05:00" else "2026-10-04 17:05:00"
+POLLS_CLOSE_TIME <- as.POSIXct(Sys.getenv("POLLS_CLOSE_TIME", DEFAULT_POLLS_CLOSE),
                                 tz = "America/Sao_Paulo")
 MAX_ITERATIONS <- as.numeric(Sys.getenv("MAX_ITERATIONS", Inf))
 RETRY_DELAY_SEC <- 15

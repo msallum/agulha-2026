@@ -23,12 +23,14 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v5
+      # The 1st-round page (site/) keeps its frozen data in site/data on main;
+      # the live-data branch feeds the runoff page.
       - name: Add the latest live data from the live-data branch
         run: |
-          mkdir -p site/data
+          mkdir -p site/2turno/data
           if git fetch --depth=1 origin live-data; then
-            git show FETCH_HEAD:needle.json > site/data/needle.json
-            git show FETCH_HEAD:history.json > site/data/history.json
+            git show FETCH_HEAD:needle.json > site/2turno/data/needle.json
+            git show FETCH_HEAD:history.json > site/2turno/data/history.json
           else
             echo "no live-data branch yet; deploying without data"
           fi
