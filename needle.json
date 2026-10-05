@@ -1,0 +1,198 @@
+{
+  "status": "live",
+  "updated_at": "2026-10-05T00:51:11.006Z",
+  "n_municipios": 5739,
+  "pct_municipios": 99.6873,
+  "votos_totais": 118861221,
+  "needle_lula_vs_haddad_2018": 15.2512,
+  "needle_lula_vs_2022": -3.4613,
+  "needle_bolsonaro_vs_2022": 3.9392,
+  "needle_bolsonaro_vs_2018": 1.4129,
+  "prob_lula_2022": 3.7346e-45,
+  "prob_lula_2018": 2.7663e-43,
+  "margin_projected_2022_pp": -1.9334,
+  "margin_projected_2018_pp": -1.955,
+  "margin_se_2022_pp": 0.1376,
+  "margin_se_2018_pp": 0.142,
+  "dispersion_ratio_2022": 0.8624,
+  "dispersion_ratio_2018": 5.8311,
+  "frac_votes_counted": 0.9943,
+  "rho_regional_2022": 0.6243,
+  "rho_regional_2018": 0.7783,
+  "design_effect_2022": 7.3401,
+  "design_effect_2018": 8.9002,
+  "n_regioes_reportando_2022": 510,
+  "bolsonaro_share_projected_pct": 47.0486,
+  "bolsonaro_share_se_pp": 0.0687,
+  "prob_bolsonaro_first_round": 0,
+  "by_uf": [
+    {
+      "uf": "AC",
+      "lula_2026": 28.7316,
+      "bolsonaro_2026": 64.5553,
+      "pct_counted": 100
+    },
+    {
+      "uf": "AL",
+      "lula_2026": 54.7414,
+      "bolsonaro_2026": 40.4442,
+      "pct_counted": 99.9184
+    },
+    {
+      "uf": "AM",
+      "lula_2026": 47.9697,
+      "bolsonaro_2026": 45.2256,
+      "pct_counted": 99.8045
+    },
+    {
+      "uf": "AP",
+      "lula_2026": 45.7135,
+      "bolsonaro_2026": 45.6651,
+      "pct_counted": 100
+    },
+    {
+      "uf": "BA",
+      "lula_2026": 66.0043,
+      "bolsonaro_2026": 28.6706,
+      "pct_counted": 98.7435
+    },
+    {
+      "uf": "CE",
+      "lula_2026": 63.1832,
+      "bolsonaro_2026": 31.3556,
+      "pct_counted": 99.4176
+    },
+    {
+      "uf": "DF",
+      "lula_2026": 38.1106,
+      "bolsonaro_2026": 51.3093,
+      "pct_counted": 100
+    },
+    {
+      "uf": "ES",
+      "lula_2026": 37.7609,
+      "bolsonaro_2026": 54.7824,
+      "pct_counted": 100
+    },
+    {
+      "uf": "GO",
+      "lula_2026": 31.056,
+      "bolsonaro_2026": 53.6075,
+      "pct_counted": 99.9854
+    },
+    {
+      "uf": "MA",
+      "lula_2026": 63.9071,
+      "bolsonaro_2026": 30.9695,
+      "pct_counted": 99.9021
+    },
+    {
+      "uf": "MG",
+      "lula_2026": 43.189,
+      "bolsonaro_2026": 48.3529,
+      "pct_counted": 98.7293
+    },
+    {
+      "uf": "MS",
+      "lula_2026": 34.6818,
+      "bolsonaro_2026": 58.6032,
+      "pct_counted": 100
+    },
+    {
+      "uf": "MT",
+      "lula_2026": 29.182,
+      "bolsonaro_2026": 65.1477,
+      "pct_counted": 100
+    },
+    {
+      "uf": "PA",
+      "lula_2026": 49.8092,
+      "bolsonaro_2026": 44.5866,
+      "pct_counted": 99.9145
+    },
+    {
+      "uf": "PB",
+      "lula_2026": 61.3135,
+      "bolsonaro_2026": 33.0678,
+      "pct_counted": 99.9986
+    },
+    {
+      "uf": "PE",
+      "lula_2026": 63.3986,
+      "bolsonaro_2026": 31.0787,
+      "pct_counted": 99.8478
+    },
+    {
+      "uf": "PI",
+      "lula_2026": 70.9482,
+      "bolsonaro_2026": 24.123,
+      "pct_counted": 99.79
+    },
+    {
+      "uf": "PR",
+      "lula_2026": 31.1996,
+      "bolsonaro_2026": 59.912,
+      "pct_counted": 99.9886
+    },
+    {
+      "uf": "RJ",
+      "lula_2026": 39.4152,
+      "bolsonaro_2026": 53.0089,
+      "pct_counted": 100
+    },
+    {
+      "uf": "RN",
+      "lula_2026": 59.7346,
+      "bolsonaro_2026": 34.786,
+      "pct_counted": 99.6764
+    },
+    {
+      "uf": "RO",
+      "lula_2026": 25.8938,
+      "bolsonaro_2026": 67.4533,
+      "pct_counted": 100
+    },
+    {
+      "uf": "RR",
+      "lula_2026": 22.8601,
+      "bolsonaro_2026": 71.0568,
+      "pct_counted": 100
+    },
+    {
+      "uf": "RS",
+      "lula_2026": 35.727,
+      "bolsonaro_2026": 55.64,
+      "pct_counted": 100
+    },
+    {
+      "uf": "SC",
+      "lula_2026": 25.0395,
+      "bolsonaro_2026": 66.6568,
+      "pct_counted": 99.9861
+    },
+    {
+      "uf": "SE",
+      "lula_2026": 62.741,
+      "bolsonaro_2026": 30.6345,
+      "pct_counted": 100
+    },
+    {
+      "uf": "SP",
+      "lula_2026": 38.2007,
+      "bolsonaro_2026": 51.9305,
+      "pct_counted": 98.6369
+    },
+    {
+      "uf": "TO",
+      "lula_2026": 43.421,
+      "bolsonaro_2026": 50.4404,
+      "pct_counted": 100
+    },
+    {
+      "uf": "ZZ",
+      "lula_2026": 47.2019,
+      "bolsonaro_2026": 43.8403,
+      "pct_counted": 96.5454
+    }
+  ]
+}
