@@ -10,3 +10,4 @@ timing_*.csv
 Rplots.pdf
 .Rhistory
 .Rproj.user/
+__pycache__/

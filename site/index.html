@@ -1,3 +1,8 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Agulha 2026</title>
 <style>
   :root {
@@ -172,6 +177,8 @@
 
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
 
+</head>
+<body>
 <div class="wrap">
   <div class="masthead">
     <div>
@@ -637,34 +644,31 @@ function applySnapshot(doc) {
   }
 }
 
-async function boot() {
-  const start = async () => {
-    try {
-      const db = await window.claude?.use?.('db');
-      if (db) {
-        // NOTE (fixed 2026-09-25): DocumentSnapshot.data is a METHOD,
-        // not a plain property -- `doc.data` alone is a function
-        // reference (truthy, but not the document body), which
-        // silently produced an all-undefined snapshot indistinguishable
-        // from "no data yet" in every field read below. Call it.
-        db.doc('needle/national').onSnapshot((doc) => {
-          if (doc && doc.exists) applySnapshot(doc.data());
-        });
-        db.doc('needle/history').onSnapshot((doc) => {
-          const points = (doc && doc.exists && doc.data().points) || [];
-          renderHistoryChart(document.getElementById('historyChart2022'), points, 'margin_2022', 'se_2022', 'var(--lula)');
-          renderHistoryChart(document.getElementById('historyChart2018'), points, 'margin_2018', 'se_2018', 'var(--lula)');
-        });
-      }
-    } catch (e) {
-      console.warn('db capability unavailable', e);
-    }
-  };
-  if (window.claude?.hot?.ready) {
-    window.claude.hot.ready(start);
-  } else {
-    start();
+// Data comes from data/needle.json and data/history.json, republished by the
+// GitHub Actions pipeline after every polling cycle. The query string bypasses
+// browser/CDN caching so each refresh sees the latest deploy.
+const REFRESH_MS = 30000;
+async function fetchJson(path) {
+  const res = await fetch(path + '?t=' + Date.now(), { cache: 'no-store' });
+  if (!res.ok) throw new Error(path + ': HTTP ' + res.status);
+  return res.json();
+}
+async function refresh() {
+  try {
+    applySnapshot(await fetchJson('data/needle.json'));
+  } catch (e) {
+    console.warn('needle data unavailable', e);
+  }
+  try {
+    const points = (await fetchJson('data/history.json')).points || [];
+    renderHistoryChart(document.getElementById('historyChart2022'), points, 'margin_2022', 'se_2022', 'var(--lula)');
+    renderHistoryChart(document.getElementById('historyChart2018'), points, 'margin_2018', 'se_2018', 'var(--lula)');
+  } catch (e) {
+    console.warn('history data unavailable', e);
   }
 }
-boot();
+refresh();
+setInterval(refresh, REFRESH_MS);
 </script>
+</body>
+</html>

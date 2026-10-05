@@ -1,0 +1,53 @@
+name: Election night
+
+on:
+  workflow_dispatch:
+    inputs:
+      use_simulado:
+        description: "Poll TSE's rehearsal environment (simulado) instead of the real results"
+        type: boolean
+        default: false
+      polls_close_time:
+        description: "Polls-close reference time, America/Sao_Paulo, 'YYYY-MM-DD HH:MM:SS' (empty = script default)"
+        required: false
+        default: ""
+      max_iterations:
+        description: "Stop after this many cycles (empty = until the count completes or the 6h job limit)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: election-night
+  cancel-in-progress: false
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: live-data
+          path: live-data
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+      - name: Install R packages
+        run: Rscript -e 'install.packages(c("tidyverse", "jsonlite", "curl"))'
+      - name: Poll TSE and publish after every cycle
+        env:
+          GH_TOKEN: ${{ github.token }}
+          USE_SIMULADO: ${{ inputs.use_simulado && 'TRUE' || 'FALSE' }}
+          POST_CYCLE_CMD: bash scripts/publish.sh
+          DATA_DIR: live-data
+          INPUT_POLLS_CLOSE: ${{ inputs.polls_close_time }}
+          INPUT_MAX_ITER: ${{ inputs.max_iterations }}
+        run: |
+          if [ -n "$INPUT_POLLS_CLOSE" ]; then export POLLS_CLOSE_TIME="$INPUT_POLLS_CLOSE"; fi
+          if [ -n "$INPUT_MAX_ITER" ]; then export MAX_ITERATIONS="$INPUT_MAX_ITER"; fi
+          Rscript run_polling_schedule.R

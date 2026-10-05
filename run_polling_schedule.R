@@ -89,6 +89,9 @@ POLLS_CLOSE_TIME <- as.POSIXct(Sys.getenv("POLLS_CLOSE_TIME", "2026-10-04 17:05:
                                 tz = "America/Sao_Paulo")
 MAX_ITERATIONS <- as.numeric(Sys.getenv("MAX_ITERATIONS", Inf))
 RETRY_DELAY_SEC <- 15
+# Optional shell command run after every successful cycle -- e.g. publishing
+# the fresh JSON to the website (scripts/publish.sh in the GitHub Actions run).
+POST_CYCLE_CMD <- Sys.getenv("POST_CYCLE_CMD", "")
 
 TIERS <- list(
   list(rank = 1, interval_min = 4,   label = "tier1_fast_ramp"),
@@ -195,6 +198,11 @@ repeat {
   }
 
   if (!is.na(frac_counted)) last_frac_counted <- frac_counted
+
+  if (run_result$ok && nzchar(POST_CYCLE_CMD)) {
+    post_status <- system(POST_CYCLE_CMD)
+    if (post_status != 0) cat("!! post-cycle command failed with status", post_status, "\n")
+  }
   # Recompute the tier with THIS cycle's fresh coverage (not the
   # possibly-stale value used to decide whether to even run this
   # cycle) -- this is what actually governs how long we sleep next.
