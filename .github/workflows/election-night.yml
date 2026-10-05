@@ -44,6 +44,8 @@ jobs:
           use-public-rspm: true
       - name: Install R packages
         run: Rscript -e 'install.packages(c("tidyverse", "jsonlite", "curl"))'
+      - name: Install Python packages (section model)
+        run: pip install numpy pandas
       - name: Poll TSE and publish after every cycle
         env:
           GH_TOKEN: ${{ github.token }}
@@ -51,6 +53,7 @@ jobs:
           USE_SIMULADO: ${{ inputs.use_simulado && 'TRUE' || 'FALSE' }}
           POST_CYCLE_CMD: bash scripts/publish.sh
           DATA_DIR: live-data
+          N_BOOT: "60"
           INPUT_POLLS_CLOSE: ${{ inputs.polls_close_time }}
           INPUT_MAX_ITER: ${{ inputs.max_iterations }}
         run: |

@@ -18,5 +18,9 @@ if summary.get("n_municipios") and (not points or points[-1]["t"] != summary["up
         "se_2022": summary["margin_se_2022_pp"],
         "se_2018": summary["margin_se_2018_pp"],
     })
+    sm = summary.get("section_model") or {}
+    if sm.get("status") == "ok":
+        points[-1].update(margin_sec=sm["margin_pp"], hw90_sec=sm["margin_hw90_pp"], pt_sec=sm["pt_pct"],
+                          pl_sec=sm["pl_pct"], counted=100 * sm["frac_votes_counted"])
 json.dump(history, open(history_path, "w"), ensure_ascii=False)
 print(f"site data updated: {len(points)} history points")

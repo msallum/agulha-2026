@@ -1,6 +1,6 @@
 """Replay an election night section by section, in true BU arrival order, and score two projection models.
 
-Usage: python3 replay/replay.py <data_dir> <target_year> <base_year> <turno> [n_boot]
+Usage: python3 replay/replay.py <data_dir> <target_year> <base_year> <turno> [n_boot] [modes, default sec,agg]
 Needs <data_dir>/secoes_{year}_{turno}t.parquet for both years (prep_bweb.py / prep_secao.py) and
 municipio_regional_clusters.csv (repo root). Writes <data_dir>/replay_{target}_{turno}t.csv.
 
@@ -20,11 +20,9 @@ import sys
 import numpy as np
 import pandas as pd
 
-REGIAO = {**dict.fromkeys(["AC", "AM", "AP", "PA", "RO", "RR", "TO"], "N"),
-          **dict.fromkeys(["AL", "BA", "CE", "MA", "PB", "PE", "PI", "RN", "SE"], "NE"),
-          **dict.fromkeys(["DF", "GO", "MS", "MT"], "CO"),
-          **dict.fromkeys(["ES", "MG", "RJ", "SP"], "SE"),
-          **dict.fromkeys(["PR", "RS", "SC"], "S"), "ZZ": "ZZ"}
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from section_model import REGIAO, SectionModel, apply_pivot, fit_pivot  # noqa: E402
+
 CHECKPOINTS = [0.5, 1, 2, 3, 4, 5, 7.5, 10, 12.5, 15, 20, 25, 30, 40, 50, 60, 70, 80, 90, 95, 98]
 VOTE = ["pt", "pl", "outros"]
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -64,6 +62,37 @@ def load(data_dir, target, base, turno):
 
 
 # ---------------------------------------------------------------- município model (port of the live model)
+def pivot_base(s, data_dir, target, hist_years):
+    """Runoff base from the SAME seção's first round: the 1st->2nd-round transfer function fitted on past elections'
+    seções (hist_years), applied to the target's first-round votes. The previous-runoff polling-place base already on
+    s (b_*) becomes extra covariates. Returns the modified frame and the extra covariate matrix."""
+    k = ["uf", "cd_mun", "zona", "secao"]
+    betas = []
+    for y in hist_years:
+        a = pd.read_parquet(os.path.join(data_dir, f"secoes_{y}_1t.parquet"))
+        b = pd.read_parquet(os.path.join(data_dir, f"secoes_{y}_2t.parquet"))
+        d = a[k + VOTE].merge(b[k + ["pt", "pl"]], on=k, suffixes=("1", "2"))
+        d = d[(d.pt1 + d.pl1 + d.outros > 0) & (d.pt2 + d.pl2 > 0)]
+        betas.append(fit_pivot(d.pt1, d.pl1, d.outros, d.uf, d.pt2, d.pl2))
+    beta = np.mean(betas, axis=0)
+    first = pd.read_parquet(os.path.join(data_dir, f"secoes_{target}_1t.parquet"))[k + VOTE]
+    s = s.merge(first.rename(columns={c: c + "_1t" for c in VOTE}), on=k, how="left")
+    has = s.pt_1t.notna() & ((s.pt_1t + s.pl_1t + s.outros_1t) > 0)
+    prev_lr = np.log((s.b_pt + 0.5) / (s.b_pl + 0.5)).to_numpy()
+    v1 = (s.pt_1t + s.pl_1t + s.outros_1t).fillna(0).to_numpy(float)
+    p = apply_pivot(beta, s.pt_1t.fillna(0), s.pl_1t.fillna(0), s.outros_1t.fillna(0), s.uf)
+    f1 = np.where(has, np.log((s.pt_1t.fillna(0) + 0.5) / (s.pl_1t.fillna(0) + 0.5)), 0)
+    so = np.where(has, s.outros_1t.fillna(0) / np.maximum(v1, 1), 0)
+    s["exp_valid"] = np.where(has, v1, s.aptos * s.b_valid / s.b_aptos)
+    tot_prev = (s.b_pt + s.b_pl).to_numpy(float)
+    s["b_pt"] = np.where(has, p * v1, s.b_pt)
+    s["b_pl"] = np.where(has, (1 - p) * v1, s.b_pl)
+    s["b_outros"] = 0.0
+    print(f"pivot base from {hist_years} transfer: {100 * has.mean():.1f}% of seções have a first round; "
+          f"pre-count PT share {100 * s.b_pt.sum() / (s.b_pt + s.b_pl).sum():.2f}")
+    return s, np.column_stack([prev_lr, f1, so])
+
+
 def mun_model(s, n, base_mun, prior):
     """Projected PT-PL margin (share of valid votes) and SE after the first n seções."""
     c = s.iloc[:n]
@@ -115,93 +144,27 @@ def mun_model(s, n, base_mun, prior):
     return proj, np.sqrt(var)
 
 
-# ---------------------------------------------------------------- section model
-def eb_effects(r, w, g, n_groups):
-    """Empirical-Bayes shrunk group means of residual r (weights w, integer groups g); returns per-group effects."""
-    W = np.bincount(g, w, n_groups)
-    W2 = np.bincount(g, w * w, n_groups)
-    has = W > 0
-    m = np.zeros(n_groups)
-    m[has] = np.bincount(g, w * r, n_groups)[has] / W[has]
-    within = (w * (r - m[g]) ** 2).sum() / w.sum()
-    neff = np.zeros(n_groups)
-    neff[has] = W[has] ** 2 / W2[has]
-    between_raw = (W[has] * m[has] ** 2).sum() / W.sum()
-    tau2 = max(0.0, between_raw - within * (W[has] / neff[has]).sum() / W.sum())
-    eff = np.zeros(n_groups)
-    eff[has] = m[has] * tau2 / (tau2 + within / neff[has])
-    return eff
-
-
-class SectionModel:
-    def __init__(self, s, turno):
-        self.turno = turno
-        self.ref = "outros" if turno == 1 else "pl"
-        self.comps = ["pt", "pl"] if turno == 1 else ["pt"]
-        self.s = s
-        base_tot = s[["b_pt", "b_pl", "b_outros"]].sum(axis=1)
-        self.base_lr = np.column_stack([np.log((s["b_" + c] + 0.5) / (s["b_" + self.ref] + 0.5)) for c in self.comps])
-        # Base vote profile as both shares and log-ratios: the log-ratios cut the 2022 first-round mid-count error
-        # from ~0.9pp to ~0.3pp (replay/README.md).
-        self.X = np.column_stack([np.ones(len(s)), s.b_pt / base_tot, s.b_pl / base_tot, s.log_size - s.log_size.mean(),
-                                  self.base_lr])
-        self.lr = np.column_stack([np.log((s[c] + 0.5) / (s[self.ref] + 0.5)) for c in self.comps])
-        self.levels = []
-        for col in ("regiao", "uf", "cd_mun"):
-            codes, uniq = pd.factorize(s[col])
-            self.levels.append((codes, len(uniq)))
-        self.uf_codes, n_uf = pd.factorize(s.uf)
-        self.n_uf = n_uf if isinstance(n_uf, int) else len(n_uf)
-        self.mun_codes, self.n_mun = self.levels[2]
-        self.rate = (s.b_valid / s.b_aptos).values  # base valid votes per eligible voter, at the polling place
-        self.exp_valid = s.aptos.values * self.rate
-        self.valid = s.valid.values.astype(float)
-
-    def project(self, n, mult=None):
-        """Projected (PT share, PL share, margin) after the first n seções; mult = bootstrap município weights."""
-        s = self.s
-        cnt = slice(0, n)
-        w = self.valid[cnt].copy()
-        if mult is not None:
-            w = w * mult[self.mun_codes[cnt]]
-        keep = w > 0
-        X = self.X[cnt][keep]
-        wk = w[keep]
-        pend = slice(n, len(s))
-        swing_pend = []
-        for j in range(len(self.comps)):
-            y = (self.lr[cnt, j] - self.base_lr[cnt, j])[keep]
-            sw = np.sqrt(wk)
-            beta = np.linalg.lstsq(X * sw[:, None], y * sw, rcond=None)[0]
-            r = y - X @ beta
-            pred = self.X[pend] @ beta
-            for codes, ng in self.levels:
-                eff = eb_effects(r, wk, codes[cnt][keep], ng)
-                r = r - eff[codes[cnt][keep]]
-                pred = pred + eff[codes[pend]]
-            swing_pend.append(pred)
-        lr = self.base_lr[pend] + np.column_stack(swing_pend)
-        e = np.exp(lr)
-        denom = 1 + e.sum(axis=1)
-        shares = e / denom[:, None]
-        # Turnout: observed valid votes vs expected among counted seções, by UF, shrunk toward national.
-        ucodes = self.uf_codes[cnt][keep]
-        V = np.bincount(ucodes, wk, self.n_uf)
-        E = np.bincount(ucodes, (self.exp_valid[cnt][keep] * (w[keep] / self.valid[cnt][keep])), self.n_uf)
-        adj_nat = V.sum() / E.sum()
-        m = 2000.0
-        adj = (V + m * adj_nat) / (E + m)
-        vpend = self.exp_valid[pend] * adj[self.uf_codes[pend]]
-        pt = s.pt.values[cnt].sum() + (vpend * shares[:, 0]).sum()
-        pl_p = shares[:, 1] if self.turno == 1 else 1 / denom
-        pl = s.pl.values[cnt].sum() + (vpend * pl_p).sum()
-        tot = self.valid[cnt].sum() + vpend.sum()
-        return pt / tot, pl / tot, (pt - pl) / tot
+# ---------------------------------------------------------------- section model (section_model.py)
+def units(s, n, mode):
+    """Counting units after the first n seções: one per seção ("sec"), or one per município ("agg", the live case:
+    TSE publishes município totals plus which seções are totalized)."""
+    unit_of = np.full(len(s), -1)
+    if mode == "sec":
+        unit_of[:n] = np.arange(n)
+        votes = s[["pt", "pl", "outros"]].to_numpy()[:n]
+        unit_mun = s.mun_code.to_numpy()[:n]
+    else:
+        codes, uniq = pd.factorize(s.mun_code.to_numpy()[:n])
+        unit_of[:n] = codes
+        votes = np.column_stack([np.bincount(codes, s[c].to_numpy()[:n], len(uniq)) for c in ("pt", "pl", "outros")])
+        unit_mun = np.asarray(uniq)
+    return unit_of, votes, unit_mun
 
 
 def main():
     data_dir, target, base, turno = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4])
     n_boot = int(sys.argv[5]) if len(sys.argv) > 5 else 100
+    modes = sys.argv[6].split(",") if len(sys.argv) > 6 else ["sec", "agg"]
     s, b = load(data_dir, target, base, turno)
     truth_pt, truth_pl = s.pt.sum() / s.valid.sum(), s.pl.sum() / s.valid.sum()
     truth = truth_pt - truth_pl
@@ -214,33 +177,35 @@ def main():
     pj = pd.read_json(os.path.join(REPO, "regional_correlation_prior.json" if turno == 1 else "regional_correlation_prior_2turno.json"), typ="series")
     prior = {"w": pj.prior_sigma2_within_rgi, "b": pj.prior_sigma2_between_rgi}
 
-    model = SectionModel(s, turno)
-    rng = np.random.default_rng(2022)
+    s["exp_valid"] = s.aptos * s.b_valid / s.b_aptos
+    s["mun_code"] = pd.factorize(s.cd_mun)[0]
+    extra = None
+    pivot = os.environ.get("PIVOT_YEARS")  # e.g. "2018": runoff base from the same seção's first round
+    if pivot and turno == 2:
+        s, extra = pivot_base(s, data_dir, target, [int(y) for y in pivot.split(",")])
+    model = SectionModel(s, turno, extra_X=extra)
     rows = []
     for pct in CHECKPOINTS:
         n = int(round(len(s) * pct / 100))
         mun_proj, mun_se = mun_model(s, n, base_mun, prior)
-        pt, pl, mg = model.project(n)
-        boots = []
-        for _ in range(n_boot):
-            mult = rng.poisson(1.0, model.n_mun).astype(float)
-            boots.append(model.project(n, mult))
-        boots = np.array(boots)
-        lo, hi = np.percentile(boots[:, 2], [5, 95])
         c = s.iloc[:n]
         row = dict(pct_secoes=pct, hora=s.t.iloc[n - 1].strftime("%H:%M"),
                    pct_validos=100 * c.valid.sum() / s.valid.sum(),
                    apurado_margin=100 * (c.pt.sum() - c.pl.sum()) / c.valid.sum(),
                    mun_margin=100 * mun_proj, mun_se=100 * mun_se,
-                   sec_pt=100 * pt, sec_pl=100 * pl, sec_margin=100 * mg,
-                   sec_lo=100 * lo, sec_hi=100 * hi, sec_boot_sd=100 * boots[:, 2].std(),
                    truth_margin=100 * truth, truth_pt=100 * truth_pt, truth_pl=100 * truth_pl)
-        rows.append(row)
+        for mode in modes:
+            unit_of, votes, unit_mun = units(s, n, mode)
+            p = model.project_with_band(unit_of, votes, unit_mun=unit_mun, n_boot=n_boot, seed=int(pct * 10))
+            row.update({f"{mode}_margin": 100 * p["margin"], f"{mode}_pt": 100 * p["pt"], f"{mode}_pl": 100 * p["pl"],
+                        f"{mode}_boot_sd": 100 * p["margin_boot_sd"], f"{mode}_hw90": 100 * p["margin_hw90"],
+                        "frac_counted": p["frac_counted"]})
+        msg = "  ".join(f"{m} {row[m + '_margin'] - row['truth_margin']:+6.2f} ±{row[m + '_hw90']:.2f}" for m in modes)
         print(f"{pct:5.1f}% {row['hora']}  apurado {row['apurado_margin']:+6.2f}  "
-              f"mun {row['mun_margin'] - row['truth_margin']:+6.2f} (se {row['mun_se']:.2f})  "
-              f"sec {row['sec_margin'] - row['truth_margin']:+6.2f} [{row['sec_lo'] - row['truth_margin']:+.2f}, "
-              f"{row['sec_hi'] - row['truth_margin']:+.2f}]  pt {row['sec_pt'] - row['truth_pt']:+.2f}", flush=True)
-    pd.DataFrame(rows).to_csv(os.path.join(data_dir, f"replay_{target}_{turno}t.csv"), index=False)
+              f"mun {row['mun_margin'] - row['truth_margin']:+6.2f}  {msg}", flush=True)
+        rows.append(row)
+    out = os.environ.get("REPLAY_OUT", os.path.join(data_dir, f"replay_{target}_{turno}t.csv"))
+    pd.DataFrame(rows).to_csv(out, index=False)
     print(f"truth: PT {100 * truth_pt:.2f}  PL {100 * truth_pl:.2f}  margin {100 * truth:+.2f}")
 
 

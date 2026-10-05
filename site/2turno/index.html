@@ -131,6 +131,7 @@
     font-size: 20px; font-weight: 700; letter-spacing: 0.01em;
     margin: 0 0 4px 0;
   }
+  .prob-dispersion:empty { display: none; }
   .section-note { font-size: 12.5px; color: var(--muted); margin: 0 0 14px 0; max-width: 60ch; }
 
   table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
@@ -202,7 +203,7 @@
         <text x="26" y="146" font-size="10" fill="var(--bolsonaro)" font-weight="700">BOLSONARO ↑</text>
         <text x="214" y="146" font-size="10" fill="var(--lula)" font-weight="700" text-anchor="end">LULA ↑</text>
       </svg>
-      <div class="gauge-caption">Projeção da margem nacional (Lula − Bolsonaro), extrapolando para os votos ainda não apurados a variação observada nos que já apuraram (base: 2º turno de 2022). A faixa ao redor do ponteiro é o intervalo de confiança de 95%.</div>
+      <div class="gauge-caption" id="gaugeCaption">Projeção da margem nacional (Lula − Bolsonaro) pelo modelo por seção: cada seção ainda não apurada recebe o resultado da sua própria base mais a variação observada nas seções já apuradas. A faixa ao redor do ponteiro é o intervalo de 90%, calibrado nas apurações de 2022 e de 2026.</div>
       <div class="gauge-caption" id="gaugeCiText" style="font-weight:600"></div>
     </div>
 
@@ -248,16 +249,34 @@
   <div class="panel">
     <h2>Probabilidade — quem lidera ao final da apuração</h2>
     <p class="section-note">
-      Projeção do resultado nacional: a variação média (ponderada por voto) observada nos municípios já apurados é
-      extrapolada para os municípios ainda não apurados. A incerteza cai conforme mais votos entram — e sobe se os
-      municípios já apurados estiverem variando de forma bem mais heterogênea do que o normal entre eleições, sinal de
-      que o histórico está sendo um guia menos confiável desta vez. No 2º turno só há dois
-      candidatos: quem terminar a apuração à frente vence.
+      O modelo por seção compara os votos já apurados de cada município com a base exata das seções que eles cobrem
+      (as seções totalizadas segundo o TSE), e projeta cada seção pendente a partir da sua própria base. Nas apurações
+      de 2022 e do 1º turno de 2026, refeitas na ordem real de chegada, errou a margem final por menos de 0,5 p.p. a
+      partir de poucos por cento apurados. Os modelos por município (a versão anterior desta agulha) comparam cada
+      município com o seu resultado total no passado e ficam como referência. No 2º turno só há dois candidatos: quem
+      terminar a apuração à frente vence.
     </p>
 
     <div class="prob-block">
       <div class="prob-header">
-        <span class="prob-label">vs. 2º turno de 2022 (base principal)</span>
+        <span class="prob-label">Modelo por seção (principal)</span>
+        <span class="prob-dispersion" id="dispersionSec"></span>
+      </div>
+      <div class="prob-bar-track">
+        <div class="prob-bar-fill lula" id="probBarLulaSec" style="width:50%"></div>
+        <div class="prob-bar-fill bolsonaro" id="probBarBolsonaroSec" style="width:50%"></div>
+      </div>
+      <div class="prob-readout">
+        <span style="color:var(--lula)"><span id="probLulaSec">—</span> Lula</span>
+        <span style="color:var(--bolsonaro)"><span id="probBolsonaroSec">—</span> Bolsonaro</span>
+      </div>
+      <div class="prob-sub" id="marginSecsub">Aguardando apuração.</div>
+      <div class="prob-sub" id="basisSec"></div>
+    </div>
+
+    <div class="prob-block">
+      <div class="prob-header">
+        <span class="prob-label">Modelo por município, vs. 2º turno de 2022</span>
         <span class="prob-dispersion" id="dispersion2022"></span>
       </div>
       <div class="prob-bar-track">
@@ -274,7 +293,7 @@
 
     <div class="prob-block">
       <div class="prob-header">
-        <span class="prob-label">vs. 2º turno de 2018 (Haddad × Jair)</span>
+        <span class="prob-label">Modelo por município, vs. 2º turno de 2018 (Haddad × Jair)</span>
         <span class="prob-dispersion" id="dispersion2018"></span>
       </div>
       <div class="prob-bar-track">
@@ -298,11 +317,15 @@
       direção — vale conferir a região por trás disso.
     </p>
     <div class="history-chart-wrap">
-      <div class="history-chart-label">vs. 2º turno de 2022 (principal)</div>
+      <div class="history-chart-label">Modelo por seção (principal) · faixa de 90%</div>
+      <svg id="historyChartSec" width="100%" preserveAspectRatio="none"></svg>
+    </div>
+    <div class="history-chart-wrap" style="margin-top:14px">
+      <div class="history-chart-label">Modelo por município, vs. 2º turno de 2022 · IC 95%</div>
       <svg id="historyChart2022" width="100%" preserveAspectRatio="none"></svg>
     </div>
     <div class="history-chart-wrap" style="margin-top:14px">
-      <div class="history-chart-label">vs. 2º turno de 2018 (Haddad)</div>
+      <div class="history-chart-label">Modelo por município, vs. 2º turno de 2018 (Haddad) · IC 95%</div>
       <svg id="historyChart2018" width="100%" preserveAspectRatio="none"></svg>
     </div>
   </div>
@@ -313,7 +336,7 @@
     <div class="table-scroll">
       <table>
         <thead>
-          <tr><th>UF</th><th class="num">Apurado</th><th class="num">Lula 2022</th><th class="num">Bolsonaro 2022</th><th class="num">Lula 2026</th><th class="num">Bolsonaro 2026</th><th class="bar-cell">Margem</th></tr>
+          <tr><th>UF</th><th class="num">Apurado</th><th class="num">Lula 2022</th><th class="num">Bolsonaro 2022</th><th class="num" id="thLula2026">Lula 2026</th><th class="num" id="thBolso2026">Bolsonaro 2026</th><th class="bar-cell">Margem</th></tr>
         </thead>
         <tbody id="ufTableBody"></tbody>
       </table>
@@ -325,7 +348,7 @@
   </div>
 
   <footer>
-    Dados: TSE (votação por município, 2º turno) · Construído a partir do painel histórico 1994–2022 já verificado neste projeto.
+    Dados: TSE (resultados por município e configuração de seções, 2º turno; locais de votação e boletins de urna de 2018–2026) · Método por seção inspirado em projecao.2026elections, de Rodrigo Mahlmeister.
     Atualizado em <span id="lastUpdated">—</span>.
   </footer>
 </div>
@@ -402,7 +425,7 @@ function describeSector(cx, cy, r, startAngle, endAngle) {
   return `M ${cx} ${cy} L ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${largeArc} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} Z`;
 }
 
-function setGauge(marginPp, sePp) {
+function setGauge(marginPp, sePp, lo90, hi90) {
   const hasValue = marginPp !== null && marginPp !== undefined && !Number.isNaN(marginPp);
   const angleDeg = valueToAngle(hasValue ? marginPp : 0);
   const [x2, y2] = polarToXY(GAUGE_CX, GAUGE_CY, 88, angleDeg);
@@ -412,15 +435,16 @@ function setGauge(marginPp, sePp) {
 
   const ciBand = document.getElementById('ciBand');
   const ciText = document.getElementById('gaugeCiText');
-  const hasSe = hasValue && sePp !== null && sePp !== undefined && !Number.isNaN(sePp) && sePp > 0;
+  const has90 = hasValue && lo90 !== undefined && hi90 !== undefined && lo90 !== null && hi90 !== null;
+  const hasSe = hasValue && (has90 || (sePp !== null && sePp !== undefined && !Number.isNaN(sePp) && sePp > 0));
   if (hasSe) {
-    const lo = marginPp - 1.96 * sePp;
-    const hi = marginPp + 1.96 * sePp;
+    const lo = has90 ? lo90 : marginPp - 1.96 * sePp;
+    const hi = has90 ? hi90 : marginPp + 1.96 * sePp;
     const angLo = valueToAngle(lo), angHi = valueToAngle(hi);
     ciBand.setAttribute('d', describeSector(GAUGE_CX, GAUGE_CY, 88, angLo, angHi));
     ciBand.setAttribute('opacity', '0.28');
     const sign = (v) => (v >= 0 ? '+' : '');
-    ciText.textContent = 'IC 95%: ' + sign(lo) + lo.toFixed(1) + ' a ' + sign(hi) + hi.toFixed(1) + ' p.p.';
+    ciText.textContent = (has90 ? 'Faixa de 90%: ' : 'IC 95%: ') + sign(lo) + lo.toFixed(1) + ' a ' + sign(hi) + hi.toFixed(1) + ' p.p.';
   } else {
     ciBand.setAttribute('opacity', '0');
     ciText.textContent = '';
@@ -456,7 +480,8 @@ function fmtClock(iso) {
 // gauge above) rather than a charting library, since the artifact CSP
 // only admits a couple of script CDNs and this is simple enough not to
 // need one.
-function renderHistoryChart(svgEl, points, marginKey, seKey, colorVar) {
+function renderHistoryChart(svgEl, points, marginKey, seKey, colorVar, bandMult) {
+  const k = bandMult === undefined ? 1.96 : bandMult;  // half-width = k x points[seKey]
   const W = 560, H = 170, padL = 42, padR = 10, padT = 10, padB = 22;
   svgEl.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
   const valid = (points || []).filter(p => p && p[marginKey] !== null && p[marginKey] !== undefined && p[seKey] !== null && p[seKey] !== undefined && p.t);
@@ -467,7 +492,7 @@ function renderHistoryChart(svgEl, points, marginKey, seKey, colorVar) {
   const ts = valid.map(p => new Date(p.t).getTime());
   const tMin = Math.min(...ts), tMax = Math.max(...ts);
   const vals = [0];
-  valid.forEach(p => { vals.push(p[marginKey] - 1.96 * p[seKey], p[marginKey] + 1.96 * p[seKey]); });
+  valid.forEach(p => { vals.push(p[marginKey] - k * p[seKey], p[marginKey] + k * p[seKey]); });
   let yMin = Math.min(...vals), yMax = Math.max(...vals);
   if (yMin === yMax) { yMin -= 1; yMax += 1; }
   const pad = (yMax - yMin) * 0.08;
@@ -476,8 +501,8 @@ function renderHistoryChart(svgEl, points, marginKey, seKey, colorVar) {
   const xScale = (t) => tMax === tMin ? (padL + (W - padL - padR) / 2) : padL + (t - tMin) / (tMax - tMin) * (W - padL - padR);
   const yScale = (v) => padT + (1 - (v - yMin) / (yMax - yMin)) * (H - padT - padB);
 
-  const upper = valid.map(p => [xScale(new Date(p.t).getTime()), yScale(p[marginKey] + 1.96 * p[seKey])]);
-  const lower = valid.map(p => [xScale(new Date(p.t).getTime()), yScale(p[marginKey] - 1.96 * p[seKey])]).reverse();
+  const upper = valid.map(p => [xScale(new Date(p.t).getTime()), yScale(p[marginKey] + k * p[seKey])]);
+  const lower = valid.map(p => [xScale(new Date(p.t).getTime()), yScale(p[marginKey] - k * p[seKey])]).reverse();
   const bandPath = 'M ' + upper.map(pt => pt.join(',')).join(' L ') + ' L ' + lower.map(pt => pt.join(',')).join(' L ') + ' Z';
   const linePath = 'M ' + valid.map(p => xScale(new Date(p.t).getTime()) + ',' + yScale(p[marginKey])).join(' L ');
   const zeroY = yScale(0);
@@ -523,7 +548,8 @@ function setProbBlock(prefix, probLula, marginPp, sePp, dispersionRatio, fracVot
     sub.textContent = 'Aguardando apuração.';
   } else {
     const sign = marginPp >= 0 ? '+' : '';
-    sub.textContent = 'margem projetada: ' + sign + marginPp.toFixed(1) + ' p.p. (Lula − Bolsonaro) ± ' + (sePp || 0).toFixed(1) + ' p.p.';
+    sub.textContent = 'margem projetada: ' + sign + marginPp.toFixed(1) + ' p.p. (Lula − Bolsonaro) ± ' + (sePp || 0).toFixed(1) + ' p.p.' +
+      (prefix === 'Sec' ? ' (faixa de 90%)' : ' (erro padrão)');
   }
 
   const badge = document.getElementById('dispersion' + prefix);
@@ -558,7 +584,16 @@ function applySnapshot(doc) {
   document.getElementById('rowBolso2022').innerHTML = fmtPp(bolso22) + '<span class="unit">p.p.</span>';
   document.getElementById('rowBolso2018').innerHTML = fmtPp(bolso18) + '<span class="unit">p.p.</span>';
 
-  setGauge(doc.margin_projected_2022_pp, doc.margin_se_2022_pp);
+  const sm = (doc.section_model && doc.section_model.status === 'ok') ? doc.section_model : null;
+  if (sm) {
+    setGauge(sm.margin_pp, null, sm.margin_pp - sm.margin_hw90_pp, sm.margin_pp + sm.margin_hw90_pp);
+    setProbBlock('Sec', sm.prob_lula, sm.margin_pp, sm.margin_hw90_pp, null, sm.frac_votes_counted);
+    document.getElementById('basisSec').textContent += ' Base: ' + sm.base + '.';
+  } else {
+    // Section model not available this cycle: the gauge falls back to the município model (vs. 2022).
+    setGauge(doc.margin_projected_2022_pp, doc.margin_se_2022_pp);
+    setProbBlock('Sec', null, null, null, null, null);
+  }
 
   setProbBlock('2022', doc.prob_lula_2022, doc.margin_projected_2022_pp, doc.margin_se_2022_pp, doc.dispersion_ratio_2022, doc.frac_votes_counted);
   setProbBlock('2018', doc.prob_lula_2018, doc.margin_projected_2018_pp, doc.margin_se_2018_pp, doc.dispersion_ratio_2018, doc.frac_votes_counted);
@@ -568,9 +603,18 @@ function applySnapshot(doc) {
   document.getElementById('statFracVotos').textContent = fmtPct01(doc.frac_votes_counted);
   document.getElementById('statVotos').textContent = fmtInt(doc.votos_totais);
 
-  if (Array.isArray(doc.by_uf) && doc.by_uf.length > 0) {
+  if (sm && sm.by_uf) {
+    // Projected final result per state (section model): counted votes + projected pending seções.
+    byUf2026Live = {};
+    Object.entries(sm.by_uf).forEach(([uf, r]) => { byUf2026Live[uf] = { lula: r.pt_pct, bolsonaro: r.pl_pct, pct_counted: r.counted_pct }; });
+    document.getElementById('thLula2026').textContent = 'Lula 2026 (proj.)';
+    document.getElementById('thBolso2026').textContent = 'Bolsonaro 2026 (proj.)';
+    document.getElementById('ufSectionNote').textContent = 'Projeção do resultado final de 2026 por estado (modelo por seção), ao lado do 2º turno de 2022. "Apurado" é a parcela dos votos projetados do estado já contada.';
+  } else if (Array.isArray(doc.by_uf) && doc.by_uf.length > 0) {
     byUf2026Live = {};
     doc.by_uf.forEach(r => { byUf2026Live[r.uf] = { lula: r.lula_2026, bolsonaro: r.bolsonaro_2026, pct_counted: r.pct_counted }; });
+    document.getElementById('thLula2026').textContent = 'Lula 2026';
+    document.getElementById('thBolso2026').textContent = 'Bolsonaro 2026';
     document.getElementById('ufSectionNote').textContent = 'Comparando o 2º turno de 2022 com a apuração de 2026 em andamento, por estado.';
   }
   renderUfTable();
@@ -610,6 +654,7 @@ async function refresh() {
   }
   try {
     const points = (await fetchJson('data/history.json')).points || [];
+    renderHistoryChart(document.getElementById('historyChartSec'), points, 'margin_sec', 'hw90_sec', 'var(--needle)', 1);
     renderHistoryChart(document.getElementById('historyChart2022'), points, 'margin_2022', 'se_2022', 'var(--lula)');
     renderHistoryChart(document.getElementById('historyChart2018'), points, 'margin_2018', 'se_2018', 'var(--lula)');
   } catch (e) {

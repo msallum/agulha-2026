@@ -940,6 +940,9 @@ t_write_start <- Sys.time()
 summary_out <- list(
   round = ROUND,
   status = "live",
+  election_code = ELECTION_CODE,
+  base_url = BASE,  # live_section_model.py reads TSE's seção configuration from here
+  cycle = CICLO,
   updated_at = format(Sys.time(), "%Y-%m-%dT%H:%M:%OS3Z", tz = "UTC"),
   n_municipios = nrow(reporting),
   pct_municipios = 100 * nrow(reporting) / nrow(comparison),

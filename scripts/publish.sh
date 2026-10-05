@@ -3,6 +3,9 @@
 # the live-data branch (checked out at $DATA_DIR) and redeploy GitHub Pages.
 set -euo pipefail
 DATA_DIR="${DATA_DIR:-live-data}"
+# Section-level projection (live_section_model.py): adds "section_model" to the summary. A failure here must not
+# stop the município model's numbers from publishing.
+python3 live_section_model.py || echo "publish: section model failed, publishing without it"
 python3 scripts/update_site_data.py live_needle_summary_latest.json "$DATA_DIR"
 cd "$DATA_DIR"
 git add needle.json history.json
