@@ -212,3 +212,10 @@ Since the earlier elections are less relevant, the choices below are made on the
 - 100% on 2026 and on the 2022 runoffs;
 - 93% on the 2022 1t;
 - 67–73% on the two 2018 realignment nights.
+
+## 2026 per-seção votes (published 6 Oct 2026)
+
+TSE posted `votacao_secao_2026_BR.zip` and an updated `detalhe_votacao_secao_2026.zip` (now with polling-place numbers) on 6 Oct.
+- `prep_secao.py <dir> 2026 13 22` reproduces the official 1st round exactly: Lula 45.16, Flávio Bolsonaro 47.03, 499,206 seções.
+- `section_base_2026.csv.gz` now carries each seção's own 2026 first round (`r1_*`); 42 abroad seções with no votes have none.
+- `live_section_model.py` therefore uses the pivot base for the runoff.
