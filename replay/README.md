@@ -219,3 +219,23 @@ TSE posted `votacao_secao_2026_BR.zip` and an updated `detalhe_votacao_secao_202
 - `prep_secao.py <dir> 2026 13 22` reproduces the official 1st round exactly: Lula 45.16, Flávio Bolsonaro 47.03, 499,206 seções.
 - `section_base_2026.csv.gz` now carries each seção's own 2026 first round (`r1_*`); 42 abroad seções with no votes have none.
 - `live_section_model.py` therefore uses the pivot base for the runoff.
+
+### 2026 1st round from per-seção data (`replay_2026s.py`)
+
+With `votacao_secao_2026` the 2026 night can be replayed like the others: at each minute the competitor published, the counted seções are those TSE had totalized by then. There are two modes:
+- `agg` — município totals plus the set of counted seções, i.e. what the live pipeline sees;
+- `sec` — each counted seção's own votes, an upper bound.
+
+All use the current default (UF coefficients κ = 1e4 plus demographics). Mean absolute error in pp:
+
+| seções counted | Lula, agg | Lula, sec | Lula, competitor | margin, agg | margin, sec | margin, competitor |
+|---|---:|---:|---:|---:|---:|---:|
+| first 10% (7 points) | 0.18 | 0.12 | 0.28 | 0.40 | 0.24 | 0.40 |
+| 10–50% (15) | 0.04 | 0.07 | 0.05 | 0.04 | 0.09 | 0.08 |
+| 50–90% (27) | 0.06 | 0.02 | 0.03 | 0.07 | 0.03 | 0.06 |
+
+The live-feasible version now matches the competitor across the night and is slightly ahead in the first 10%.
+
+Caveats:
+- 2026 was one of the seven nights used to choose the configuration.
+- The replay knows exactly which seções were counted (TSE's totalization times); live, that comes from the seção configuration file, which is still untested during a count.
