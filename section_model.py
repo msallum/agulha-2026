@@ -1,15 +1,21 @@
 """Section-level projection model, shared by the live pipeline (live_section_model.py) and the replays (replay/).
 
-Every seção of the target election carries a BASE: the votes its polling place cast in a reference election
-(PT, PL = the Bolsonaro lineage, outros), its expected valid votes, and its group codes (região > UF >
-município). The live count arrives in UNITS of counted seções: single seções in a replay with per-seção data, or,
-live, the counted part of each município (TSE publishes município totals plus which seções are totalized).
-For each unit the swing is the change in log-ratios (PT/outros and PL/outros in a first round, PT/PL in a runoff)
-between its counted votes and the base of exactly the seções it covers. A weighted regression relates the swing
-to the base vote profile and município size, and empirical-Bayes residual effects by região > UF > município
-absorb what the regression misses. Every pending seção is projected as base + predicted swing, with its valid votes
+Every seção of the target election carries a BASE (PT, PL = the Bolsonaro lineage, outros), its expected valid
+votes and its group codes (região > UF > município). In a first round the base is its polling place's votes in the
+previous election; in a runoff it is the seção's own first round put through the historical first-round -> runoff
+transfer (fit_pivot / apply_pivot), with the previous runoff as an extra covariate. The live count arrives in UNITS
+of counted seções: single seções in a replay with per-seção data, or, live, the counted part of each município (TSE
+publishes município totals plus which seções are totalized).
+
+For each unit the swing is the log-ratio shift (PT/outros and PL/outros in a first round, PT/PL in a runoff) that,
+applied to each of its seções' base, reproduces its counted shares. A weighted regression relates the swing to the
+base vote profile, município size and the seções' electorate profile (sex, age, education; demo_covariates). Its
+coefficients vary by região and then by UF, each a ridge toward the level above (slope_prior_votes). Empirical-Bayes
+residual effects by região > UF > município absorb what the regression misses. A município's effect is shrunk by
+how many of its votes are counted. Every pending seção is projected as base + predicted swing, with its valid votes
 = expected valid votes x a UF turnout adjustment, and added to what is already counted. A Poisson bootstrap over
-municípios gives the spread, widened by the band calibration from the 2022 replays (replay/README.md).
+municípios gives the spread. The 90% band adds a floor that shrinks with the share counted, calibrated on the
+2018-2026 replays (replay/tune.py, replay/README.md).
 """
 import numpy as np
 import pandas as pd
