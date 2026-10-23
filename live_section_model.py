@@ -11,6 +11,8 @@ Runoff -- the seção's own 2026 first round through the historical first-round 
 first-round votes (r1_* columns), the 2022 runoff polling place alone. Expected valid votes in the runoff: the seção's
 own 2026 first-round valid votes.
 
+No projection is published until 2% of the electorate is in counted seções (status "preliminar").
+
 Env: ROUND (1/2), SECTION_BASE, PIVOT_FILE, SUMMARY, SNAPSHOT, N_BOOT, CS_DIR (read cs.json files from a directory
 instead of TSE, for tests).
 """
@@ -34,6 +36,7 @@ SNAPSHOT = os.environ.get("SNAPSHOT", "live_snapshot_latest.csv")
 N_BOOT = int(os.environ.get("N_BOOT", "100"))
 KEY = ["uf", "cd_mun", "zona", "secao"]
 MIN_IDENTIFIED = 0.8  # share of a município's counted seções cs.json must identify for it to inform the swing
+MIN_ELECTORATE_PCT = 2.0  # no projection until this share of the electorate is in counted seções (as projecao.2026)
 
 
 def phi(z):
@@ -172,13 +175,23 @@ def main():
     demo = None
     if set(DEMO_COLS) <= set(s.columns):  # electorate profile of each seção (sex, age, education)
         demo = demo_covariates(s, s[["uf", "cd_mun", "zona", "secao", "eleitores_perfil", *DEMO_COLS]].dropna())
+    # Share of the electorate in counted seções (the competitor's axis). Below MIN_ELECTORATE_PCT the first few
+    # municípios are too unrepresentative to publish a projection; the page says it is waiting instead.
+    pct_eleitorado = float(100 * (s.aptos.to_numpy() * frac).sum() / s.aptos.sum())
+    if pct_eleitorado < MIN_ELECTORATE_PCT:
+        summary["section_model"] = {"base": base_kind, "updated_at": summary.get("updated_at"), "status": "preliminar",
+                                    "pct_eleitorado": pct_eleitorado, "min_pct_eleitorado": MIN_ELECTORATE_PCT}
+        json.dump(summary, open(SUMMARY, "w"), ensure_ascii=False, indent=1, allow_nan=False, default=float)
+        print(f"section model: {pct_eleitorado:.2f}% of the electorate counted, below {MIN_ELECTORATE_PCT}%; "
+              "no projection yet")
+        return
     model = SectionModel(s, ROUND, extra_X=extra, demo_X=demo)
     p = model.project_with_band(unit_of, votes, unit_frac=frac, unit_mun=np.arange(len(votes)), n_boot=N_BOOT,
                                 unit_fit=unit_fit)
     detail = model.project(unit_of, votes, unit_frac=frac, detail=True, unit_fit=unit_fit)
 
     out = {"base": base_kind, "updated_at": summary.get("updated_at"),
-           "secoes_identificadas_pct": 100 * listed.mean(), "pleito": pleito,
+           "secoes_identificadas_pct": 100 * listed.mean(), "pleito": pleito, "pct_eleitorado": pct_eleitorado,
            "municipios_no_ajuste": int(unit_fit.sum()) if unit_fit is not None else None}
     if np.isnan(p["margin"]):
         out["status"] = "aguardando"

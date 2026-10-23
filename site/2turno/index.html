@@ -203,7 +203,7 @@
         <text x="26" y="146" font-size="10" fill="var(--bolsonaro)" font-weight="700">BOLSONARO ↑</text>
         <text x="214" y="146" font-size="10" fill="var(--lula)" font-weight="700" text-anchor="end">LULA ↑</text>
       </svg>
-      <div class="gauge-caption" id="gaugeCaption">Projeção da margem nacional (Lula − Bolsonaro) pelo modelo por seção: cada seção ainda não apurada recebe o resultado da sua própria base mais a variação observada nas seções já apuradas. A faixa ao redor do ponteiro é o intervalo de 90%, calibrado nas apurações de 2022 e de 2026.</div>
+      <div class="gauge-caption" id="gaugeCaption">Projeção da margem nacional (Lula − Bolsonaro) pelo modelo por seção: cada seção ainda não apurada recebe o resultado da sua própria base mais a variação observada nas seções já apuradas. A faixa ao redor do ponteiro é o intervalo de 90%, calibrado nas apurações de 2018 a 2026. A projeção aparece a partir de 2% do eleitorado apurado.</div>
       <div class="gauge-caption" id="gaugeCiText" style="font-weight:600"></div>
     </div>
 
@@ -589,6 +589,14 @@ function applySnapshot(doc) {
     setGauge(sm.margin_pp, null, sm.margin_pp - sm.margin_hw90_pp, sm.margin_pp + sm.margin_hw90_pp);
     setProbBlock('Sec', sm.prob_lula, sm.margin_pp, sm.margin_hw90_pp, null, sm.frac_votes_counted);
     document.getElementById('basisSec').textContent += ' Base: ' + sm.base + '.';
+  } else if (doc.section_model && doc.section_model.status === 'preliminar') {
+    // Under 2% of the electorate counted: no projection yet (the first municípios are too unrepresentative).
+    setGauge(null, null);
+    setProbBlock('Sec', null, null, null, null, null);
+    const waiting = 'Projeção a partir de 2% do eleitorado apurado (agora: ' +
+      doc.section_model.pct_eleitorado.toFixed(1).replace('.', ',') + '%).';
+    document.getElementById('marginSecsub').textContent = waiting;
+    document.getElementById('gaugeCiText').textContent = waiting;
   } else {
     // Section model not available this cycle: the gauge falls back to the município model (vs. 2022).
     setGauge(doc.margin_projected_2022_pp, doc.margin_se_2022_pp);
