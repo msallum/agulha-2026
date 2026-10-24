@@ -76,6 +76,13 @@
     text-wrap: balance;
   }
   .masthead .sub { color: var(--muted); font-size: 13px; }
+  .masthead .sub a { color: inherit; }
+  .runoff-link {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+    padding: 14px 20px; font-size: 14px; color: var(--ink); text-decoration: none;
+  }
+  .runoff-link:hover { background: var(--panel-2); }
+  .runoff-link .runoff-arrow { font-weight: 700; white-space: nowrap; }
   .status-pill {
     display: inline-flex; align-items: center; gap: 6px;
     font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
@@ -183,10 +190,15 @@
   <div class="masthead">
     <div>
       <h1>Agulha 2026</h1>
-      <div class="sub">Comparando o 1º turno com a mesma seção do eleitorado em 2022 e 2018</div>
+      <div class="sub">Comparando o 1º turno com a mesma seção do eleitorado em 2022 e 2018 · <a href="2turno/">ver o 2º turno</a></div>
     </div>
     <span class="status-pill" id="statusPill"><span class="dot"></span><span id="statusText">Aguardando 4 de outubro</span></span>
   </div>
+
+  <a class="panel runoff-link" href="2turno/">
+    <span><strong>2º turno · 25 de outubro</strong> — a projeção ao vivo de Lula × Flávio Bolsonaro está em uma nova página.</span>
+    <span class="runoff-arrow">Abrir →</span>
+  </a>
 
   <div class="panel hero">
     <div class="gauge-wrap">
