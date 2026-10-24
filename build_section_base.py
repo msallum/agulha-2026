@@ -17,7 +17,8 @@ Match cascade, per 2026 polling place (município, zona, local number):
 Output: one row per 2026 principal seção with its electorate (aggregated seções folded in), the match type, the 2022
 1st-round (b1_*) and runoff (b2_*) votes of the matched place, the seção's 2026 1st-round turnout and valid votes
 (n1_comparecimento, n1_valid, from the detalhe file), its electorate profile (section_model.DEMO_COLS, from
-<data_dir>/perfil_2026.parquet, replay/prep_perfil.py) and, once published, its 2026 1st-round votes (r1_*).
+<data_dir>/perfil_2026.parquet, replay/prep_perfil.py) and, once published, its 2026 1st-round votes (r1_*) and its
+totalization order within its município on 4 Oct (t1_rank).
 """
 import csv
 import io
@@ -178,9 +179,14 @@ def main():
 
     first = os.path.join(data_dir, "secoes_2026_1t.parquet")
     if os.path.exists(first):
-        r1 = pd.read_parquet(first)[["uf", "cd_mun", "zona", "secao", "pt", "pl", "outros"]]
+        r1 = pd.read_parquet(first)[["uf", "cd_mun", "zona", "secao", "pt", "pl", "outros", "totalizado"]]
         sec = sec.merge(r1.rename(columns={"pt": "r1_pt", "pl": "r1_pl", "outros": "r1_outros"}),
                         on=["uf", "cd_mun", "zona", "secao"], how="left")
+        # Order in which each seção was totalized within its município on 4 Oct (0 = first, 1 = last): the live
+        # model's guess of which seções a município's count covers when TSE's seção list is unusable.
+        sec["t1_rank"] = (sec.groupby("cd_mun").totalizado.rank(method="first", pct=True)).round(5)
+        sec["t1_rank"] = sec.t1_rank.fillna(1.0)
+        sec = sec.drop(columns="totalizado")
 
     sec.to_csv(out, index=False)
     w = sec.aptos / sec.aptos.sum()

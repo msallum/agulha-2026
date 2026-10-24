@@ -13,6 +13,12 @@ own 2026 first-round valid votes.
 
 No projection is published until 2% of the electorate is in counted seções (status "preliminar").
 
+Identification: a UF's cs.json is used only if its stamps look like totalization times (not bunched, not listing
+more seções than TSE reports counted); otherwise, and for any remainder, a município's count is assumed to cover its
+seções in their 4 Oct totalization order. The band widens with the share of counted votes whose coverage is guessed.
+Each cycle appends diagnostics, and the old município model's numbers for private comparison, to
+section_model_log.csv.
+
 Env: ROUND (1/2), SECTION_BASE, PIVOT_FILE, SUMMARY, SNAPSHOT, N_BOOT, CS_DIR (read cs.json files from a directory
 instead of TSE, for tests).
 """
@@ -36,6 +42,9 @@ SNAPSHOT = os.environ.get("SNAPSHOT", "live_snapshot_latest.csv")
 N_BOOT = int(os.environ.get("N_BOOT", "100"))
 KEY = ["uf", "cd_mun", "zona", "secao"]
 MIN_IDENTIFIED = 0.8  # share of a município's counted seções cs.json must identify for it to inform the swing
+MIN_FIT_VOTE_SHARE = 0.5  # the identified municípios must hold this share of counted votes to be the fit's only input
+FALLBACK_PP = 1.5  # extra band (pp of margin x unidentified share x share uncounted): replays of the 1t-order fallback
+LOG = os.environ.get("SECTION_LOG", "section_model_log.csv")
 MIN_ELECTORATE_PCT = 2.0  # no projection until this share of the electorate is in counted seções (as projecao.2026)
 
 
@@ -82,24 +91,87 @@ def counted_sections(base_url, cycle, pleito, ufs):
     return out
 
 
+def uf_usable(uf, listed, t, k):
+    """Whether a UF's cs.json time stamps plausibly mark which seções are counted. TSE's final first-round files carry
+    stamps bunched within ~20 s after the whole state finished (a bulk rewrite, not totalization times), and a file
+    listing more seções than TSE reports counted cannot be marking the counted ones."""
+    out = {}
+    df = pd.DataFrame({"uf": uf, "listed": listed, "t": t, "k": k})
+    for u, g in df.groupby("uf"):
+        c = int(g.listed.sum())
+        k_uf = g.k.sum()  # k is given once per município, 0 on its other seções
+        tt = g.t[g.listed]
+        span = (tt.max() - tt.min()).total_seconds() if c else 0.0
+        reason = None
+        if c == 0:
+            reason = "sem seções listadas"
+        elif c >= 100 and span < 120:
+            reason = f"horários agrupados ({span:.0f}s para {c} seções)"
+        elif c > 1.5 * k_uf + 50:
+            reason = f"lista {c} seções, TSE conta {k_uf:.0f}"
+        out[u] = reason
+    return out
+
+
 def reconcile(s, pct_by_mun, cs_counted):
-    """Share of each seção counted. Per município: k = share of seções counted (TSE) x its seções. The seções cs.json
-    lists as totalized count first, earliest listed first; if it lists more than k, only the earliest k count; if
-    fewer, the remainder is spread proportionally over the unlisted seções. With no cs.json this is k/n everywhere."""
+    """Share of each seção counted, how well that is identified, and which UFs' seção lists were usable.
+
+    Per município, k = TSE's share of seções counted x its seções. Seções are ordered and the first floor(k) count
+    fully, the next partly. In a UF whose cs.json is usable, the listed seções come first (by stamp, ties broken by
+    4 Oct order); otherwise -- and for the unlisted remainder -- the order is the seção's totalization order within
+    its município on 4 Oct (t1_rank), the best available guess of which seções a count covers. identified = share of
+    the município's k counted seções the list pins down: all listed ones when it lists no more than k, else those
+    strictly before the k-th stamp (a tie at the cut-off is ambiguous); 0 in a UF whose list is unusable."""
     pct = s.cd_mun.map(pct_by_mun).fillna(0).to_numpy() / 100
-    t = pd.to_datetime(pd.Series([cs_counted.get(k) for k in zip(s.uf, s.cd_mun, s.zona, s.secao)]),
+    t = pd.to_datetime(pd.Series([cs_counted.get(key) for key in zip(s.uf, s.cd_mun, s.zona, s.secao)]),
                        format="%d/%m/%Y %H:%M:%S", errors="coerce")
-    listed = t.notna().to_numpy()
-    d = pd.DataFrame({"mun": s.cd_mun.to_numpy(), "t": t, "listed": listed})
-    n = d.groupby("mun").mun.transform("size").to_numpy()
-    c = d.groupby("mun").listed.transform("sum").to_numpy().astype(float)
+    listed_raw = t.notna().to_numpy()
+    mun = s.cd_mun.to_numpy()
+    n = pd.Series(1, index=mun).groupby(level=0).transform("size").to_numpy()
     k = pct * n
-    rank = d.sort_values("t", kind="stable").groupby("mun").cumcount().reindex(d.index).to_numpy()  # 0 = earliest
-    frac_listed = np.clip(k - rank, 0, 1)  # the first floor(k) listed seções count fully, the next one partly
-    frac = np.where(listed, np.where(c >= k, frac_listed, 1.0),
-                    np.where(c >= k, 0.0, (k - c) / np.maximum(n - c, 1e-9)))
-    identified = np.where(k > 0, np.minimum(c, k) / np.maximum(k, 1e-9), 0)
-    return np.clip(frac, 0, 1), listed, identified
+    k_mun_first = np.where(pd.Series(mun).duplicated().to_numpy(), 0.0, k)  # k once per município
+    reasons = uf_usable(s.uf.to_numpy(), listed_raw, t, k_mun_first)
+    ok_uf = s.uf.map(lambda u: reasons.get(u) is None).to_numpy()
+    listed = listed_raw & ok_uf
+    t1 = s.t1_rank.to_numpy() if "t1_rank" in s else np.zeros(len(s))
+    big = pd.Timestamp.max
+    d = pd.DataFrame({"mun": mun, "not_listed": ~listed, "t": t.where(listed, big), "t1": t1})
+    order = d.sort_values(["mun", "not_listed", "t", "t1"], kind="stable").index
+    rank = np.empty(len(s), int)
+    rank[order] = d.loc[order].groupby("mun").cumcount().to_numpy()
+    frac = np.clip(k - rank, 0, 1)
+
+    # Identification per município.
+    c = pd.Series(listed.astype(float)).groupby(mun).transform("sum").to_numpy()
+    ident = np.where((k > 0) & (c <= k), c / np.maximum(k, 1e-9), 0.0)
+    over = np.unique(mun[(c > k) & (k > 0) & listed])
+    if len(over):
+        dl = d[listed & np.isin(mun, over)].assign(k=k[listed & np.isin(mun, over)])
+        certain = {}
+        for m, g in dl.groupby("mun"):
+            kk = g.k.iloc[0]
+            ts = g.t.sort_values().to_numpy()
+            cut = ts[max(int(np.ceil(kk)) - 1, 0)]
+            before, at = (ts < cut).sum(), (ts == cut).sum()
+            certain[m] = (before + at if before + at <= kk + 1e-9 else before) / kk
+        ident = np.where(np.isin(mun, over), pd.Series(mun).map(certain).fillna(0).to_numpy(), ident)
+    return frac, listed, np.clip(ident, 0, 1), reasons
+
+
+def write_log(summary, out, identified_share, mode, uf_reasons):
+    """One row per cycle in section_model_log.csv (published to the data branch), to watch identification live."""
+    row = {"updated_at": summary.get("updated_at"), "status": out.get("status"),
+           "pct_eleitorado": round(out.get("pct_eleitorado", float("nan")), 3),
+           "votos_identificados_pct": round(100 * identified_share, 1), "modo": mode,
+           "ufs_lista_ok": sum(r is None for r in uf_reasons.values()),
+           "ufs_lista_inutilizavel": "; ".join(f"{u}: {r}" for u, r in sorted(uf_reasons.items()) if r),
+           "pt_pct": out.get("pt_pct"), "pl_pct": out.get("pl_pct"), "margin_pp": out.get("margin_pp"),
+           "margin_hw90_pp": out.get("margin_hw90_pp"), "prob_lula": out.get("prob_lula"),
+           "municipios_no_ajuste": out.get("municipios_no_ajuste"),
+           "old_model_margin_2022_pp": summary.get("margin_projected_2022_pp"),
+           "old_model_se_2022_pp": summary.get("margin_se_2022_pp"),
+           "old_model_prob_lula_2022": summary.get("prob_lula_2022")}
+    pd.DataFrame([row]).to_csv(LOG, mode="a", header=not os.path.exists(LOG), index=False)
 
 
 def build_frame():
@@ -152,9 +224,9 @@ def main():
             if pleito:
                 cs_counted = counted_sections(base_url, cycle, pleito, sorted(s.uf.unique()))
         except Exception as e:
-            print(f"section config unavailable ({e}); reconciling proportionally", file=sys.stderr)
+            print(f"section config unavailable ({e}); using 4 Oct counting order", file=sys.stderr)
 
-    frac, listed, identified = reconcile(s, snap.set_index("cd_mun").pct_secoes_apuradas, cs_counted)
+    frac, listed, identified, uf_reasons = reconcile(s, snap.set_index("cd_mun").pct_secoes_apuradas, cs_counted)
     mun_codes, mun_uniq = pd.factorize(s.cd_mun)
     unit_of = np.where(frac > 0, mun_codes, -1)
     sv = snap.set_index("cd_mun")
@@ -165,13 +237,19 @@ def main():
     has_sections = np.bincount(mun_codes, frac > 0, len(mun_uniq)) > 0
     votes[: len(mun_uniq)][~has_sections] = 0  # reported share rounds to no seção: wait for the next cycle
 
-    # Only municípios whose counted seções are (mostly) identified inform the swing: for the rest, the base of the
-    # counted part is a proportional guess, which brings back the whole-município comparison the old model suffered
-    # from. If the seção configuration is missing altogether, fall back to using everyone.
+    # Only municípios whose counted seções are (mostly) identified inform the swing; for the rest, which seções their
+    # count covers is a guess (4 Oct order). If the identified ones are too few -- under 50 municípios or under half the
+    # counted votes -- everyone informs the swing, with the guessed coverage ("fallback" mode).
     ident_mun = np.bincount(mun_codes, identified, len(mun_uniq)) / np.bincount(mun_codes, None, len(mun_uniq))
     unit_fit = np.r_[ident_mun >= MIN_IDENTIFIED, np.zeros(len(others), bool)]
-    if (unit_fit & (votes.sum(axis=1) > 0)).sum() < 50:
-        unit_fit = None
+    vtot = votes.sum(axis=1)
+    counted_votes = vtot.sum()
+    identified_share = float((vtot * np.r_[ident_mun, np.zeros(len(others))]).sum() / counted_votes) if counted_votes else 0.0
+    fit_share = float(vtot[unit_fit].sum() / counted_votes) if counted_votes else 0.0
+    mode = "identificadas"
+    if (unit_fit & (vtot > 0)).sum() < 50 or fit_share < MIN_FIT_VOTE_SHARE:
+        unit_fit, mode = None, "ordem do 1º turno"
+    unidentified = 1 - identified_share
     demo = None
     if set(DEMO_COLS) <= set(s.columns):  # electorate profile of each seção (sex, age, education)
         demo = demo_covariates(s, s[["uf", "cd_mun", "zona", "secao", "eleitores_perfil", *DEMO_COLS]].dropna())
@@ -184,15 +262,25 @@ def main():
         json.dump(summary, open(SUMMARY, "w"), ensure_ascii=False, indent=1, allow_nan=False, default=float)
         print(f"section model: {pct_eleitorado:.2f}% of the electorate counted, below {MIN_ELECTORATE_PCT}%; "
               "no projection yet")
+        write_log(summary, summary["section_model"], identified_share, mode, uf_reasons)
         return
     model = SectionModel(s, ROUND, extra_X=extra, demo_X=demo)
     p = model.project_with_band(unit_of, votes, unit_frac=frac, unit_mun=np.arange(len(votes)), n_boot=N_BOOT,
                                 unit_fit=unit_fit)
     detail = model.project(unit_of, votes, unit_frac=frac, detail=True, unit_fit=unit_fit)
 
+    # Widen the band by how much of the counted vote has guessed (not identified) coverage: replays of the 4 Oct-order
+    # guess on the 2018 and 2022 runoffs needed FALLBACK_PP x share uncounted on top of the usual band.
+    if not np.isnan(p["margin"]):
+        add = FALLBACK_PP / 100 * unidentified * (1 - p["frac_counted"])
+        for name, scale in (("margin", 1.0), ("pt", 0.5), ("pl", 0.5)):
+            p[name + "_hw90"] = float(np.sqrt(p[name + "_hw90"] ** 2 + (scale * add) ** 2))
+
     out = {"base": base_kind, "updated_at": summary.get("updated_at"),
            "secoes_identificadas_pct": 100 * listed.mean(), "pleito": pleito, "pct_eleitorado": pct_eleitorado,
-           "municipios_no_ajuste": int(unit_fit.sum()) if unit_fit is not None else None}
+           "municipios_no_ajuste": int(unit_fit.sum()) if unit_fit is not None else None,
+           "votos_identificados_pct": 100 * identified_share, "modo_identificacao": mode,
+           "ufs_lista_inutilizavel": {u: r for u, r in uf_reasons.items() if r}}
     if np.isnan(p["margin"]):
         out["status"] = "aguardando"
     else:
@@ -218,11 +306,13 @@ def main():
                         for u, r in uf.iterrows() if r.valid > 0}
     summary["section_model"] = out
     json.dump(summary, open(SUMMARY, "w"), ensure_ascii=False, indent=1, allow_nan=False, default=float)
+    write_log(summary, out, identified_share, mode, uf_reasons)
     msg = (f"section model: {out['status']}" if out["status"] != "ok" else
            f"section model: Lula {out['pt_pct']:.2f} ±{out['pt_hw90_pp']:.2f}, Bolsonaro {out['pl_pct']:.2f}, "
            f"margin {out['margin_pp']:+.2f} ±{out['margin_hw90_pp']:.2f}, P(Lula) {out['prob_lula']:.3f}, "
            f"{100 * out['frac_votes_counted']:.1f}% of expected votes counted")
-    print(msg + f"; cs.json identified {out['secoes_identificadas_pct']:.1f}% of seções as totalized")
+    print(msg + f"; {100 * identified_share:.0f}% of counted votes identified by cs.json (mode: {mode}); "
+          f"usable lists in {sum(r is None for r in uf_reasons.values())} of {len(uf_reasons)} UFs")
 
 
 if __name__ == "__main__":

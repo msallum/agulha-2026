@@ -9,8 +9,11 @@ DATA_BRANCH="${DATA_BRANCH:-live-data}"
 # stop the município model's numbers from publishing.
 python3 live_section_model.py || echo "publish: section model failed, publishing without it"
 python3 scripts/update_site_data.py live_needle_summary_latest.json "$DATA_DIR"
+# Per-cycle section-model diagnostics (identification, band, and the old model's numbers for private comparison).
+[ -f section_model_log.csv ] && cp section_model_log.csv "$DATA_DIR/"
 cd "$DATA_DIR"
 git add needle.json history.json
+[ -f section_model_log.csv ] && git add section_model_log.csv
 if git diff --cached --quiet; then echo "publish: no change"; exit 0; fi
 git -c user.name="agulha-bot" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
   commit -q -m "data $(date -u +%Y-%m-%dT%H:%M:%SZ)"

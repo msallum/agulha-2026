@@ -1,6 +1,11 @@
 name: Election night
 
 on:
+  # Runoff night: 16:40 Brasília (19:40 UTC) on 25 Oct, with the defaults below (real results, round 2, live-data).
+  # The script waits for polls to close at 17:05; the 6h job limit then runs to 22:40. Remove after the runoff (it
+  # would fire again every 25 Oct).
+  schedule:
+    - cron: "40 19 25 10 *"
   workflow_dispatch:
     inputs:
       round:
@@ -53,7 +58,7 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/checkout@v5
         with:
-          ref: ${{ inputs.data_branch }}
+          ref: ${{ inputs.data_branch || 'live-data' }}
           path: live-data
       - uses: r-lib/actions/setup-r@v2
         with:
@@ -65,11 +70,11 @@ jobs:
       - name: Poll TSE and publish after every cycle
         env:
           GH_TOKEN: ${{ github.token }}
-          ROUND: ${{ inputs.round }}
+          ROUND: ${{ inputs.round || '2' }}
           USE_SIMULADO: ${{ inputs.use_simulado && 'TRUE' || 'FALSE' }}
           POST_CYCLE_CMD: bash scripts/publish.sh
           DATA_DIR: live-data
-          DATA_BRANCH: ${{ inputs.data_branch }}
+          DATA_BRANCH: ${{ inputs.data_branch || 'live-data' }}
           N_BOOT: "60"
           INPUT_ELECTION_CODE: ${{ inputs.election_code }}
           INPUT_LULA_NAME: ${{ inputs.lula_name }}

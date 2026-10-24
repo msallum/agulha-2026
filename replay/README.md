@@ -239,3 +239,30 @@ The live-feasible version now matches the competitor across the night and is sli
 Caveats:
 - 2026 was one of the seven nights used to choose the configuration.
 - The replay knows exactly which seções were counted (TSE's totalization times); live, that comes from the seção configuration file, which is still untested during a count.
+
+## When TSE's seção list is unusable (adversarial review, 24 Oct)
+
+The replays above assume perfect knowledge of which seções each município's count covers. Live, that comes from `cs.json`. TSE's real final first-round files (AC, RR, SE) stamp every seção within 2–19 seconds after the state finished, i.e. a rewrite after the fact, not totalization times.
+
+`live_section_model.py` now:
+- **Checks each UF's list.** It is rejected if its stamps are bunched (≥ 100 seções within 2 minutes) or if it lists more than 1.5× the seções TSE reports counted. All three real final files are rejected.
+- **Otherwise assumes 4 Oct order.** For rejected UFs, and for anything the list does not pin down, a município's count is assumed to cover its seções in their 4 Oct totalization order (`t1_rank` in `section_base_2026.csv.gz`).
+- **Gates the fit on identification.** Only well-identified municípios inform the swing, and only if they hold at least half the counted votes; otherwise all municípios do (mode "ordem do 1º turno").
+- **Widens the band** by `1.5pp × unidentified share of counted votes × share uncounted`.
+- **Logs every cycle** to `section_model_log.csv` on the data branch: identification, mode, projection, and the old município model's numbers for private comparison.
+
+Replaying the 2022 and 2018 runoffs (pivot base) as if no list were usable, with each seção's first-round order standing in for the runoff's (margin error, pp):
+
+| counted | 2022 exact | 2022 1t-order | 2018 exact | 2018 1t-order |
+|---|---:|---:|---:|---:|
+| 2% | −0.25 | +1.92 | +0.73 | +3.61 |
+| 5% | +0.20 | −0.00 | +0.24 | +2.69 |
+| 10% | +0.21 | +0.62 | +0.47 | +1.16 |
+| 30% | +0.07 | +0.42 | +0.26 | +0.15 |
+| 50% | +0.04 | +0.28 | +0.36 | +0.90 |
+| 90% | −0.00 | +0.13 | +0.05 | +0.15 |
+
+Results by band:
+- With the usual band, the fallback is covered at only 71% of checkpoints.
+- With the extra 1.5pp term, coverage rises to 96%. That is a conservative choice: 0.8 would give 90%, but it rests on two nights.
+- The previous proportional fallback was worse: about −1pp at 20–30% counted in 2022.
