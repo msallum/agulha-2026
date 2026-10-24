@@ -20,6 +20,22 @@ on:
         description: "Stop after this many cycles (empty = until the count completes or the 6h job limit)"
         required: false
         default: ""
+      election_code:
+        description: "TSE election code (empty = discover it; the simulado's runoff rehearsal is 22410)"
+        required: false
+        default: ""
+      lula_name:
+        description: "Ballot name counted as Lula (empty = LULA; rehearsals use fictional names, e.g. CAND PRES 52)"
+        required: false
+        default: ""
+      bolsonaro_name:
+        description: "Ballot name counted as Bolsonaro (empty = FLAVIO BOLSONARO; e.g. CAND PRES 56 in rehearsals)"
+        required: false
+        default: ""
+      data_branch:
+        description: "Branch the results are pushed to; only live-data feeds the site (use live-data-test for tests)"
+        required: false
+        default: "live-data"
 
 permissions:
   contents: write
@@ -37,7 +53,7 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/checkout@v5
         with:
-          ref: live-data
+          ref: ${{ inputs.data_branch }}
           path: live-data
       - uses: r-lib/actions/setup-r@v2
         with:
@@ -53,12 +69,19 @@ jobs:
           USE_SIMULADO: ${{ inputs.use_simulado && 'TRUE' || 'FALSE' }}
           POST_CYCLE_CMD: bash scripts/publish.sh
           DATA_DIR: live-data
+          DATA_BRANCH: ${{ inputs.data_branch }}
           N_BOOT: "60"
+          INPUT_ELECTION_CODE: ${{ inputs.election_code }}
+          INPUT_LULA_NAME: ${{ inputs.lula_name }}
+          INPUT_BOLSONARO_NAME: ${{ inputs.bolsonaro_name }}
           INPUT_POLLS_CLOSE: ${{ inputs.polls_close_time }}
           INPUT_MAX_ITER: ${{ inputs.max_iterations }}
         run: |
           if [ -n "$INPUT_POLLS_CLOSE" ]; then export POLLS_CLOSE_TIME="$INPUT_POLLS_CLOSE"; fi
           if [ -n "$INPUT_MAX_ITER" ]; then export MAX_ITERATIONS="$INPUT_MAX_ITER"; fi
+          if [ -n "$INPUT_ELECTION_CODE" ]; then export ELECTION_CODE="$INPUT_ELECTION_CODE"; fi
+          if [ -n "$INPUT_LULA_NAME" ]; then export LULA_URNA_NAME="$INPUT_LULA_NAME"; fi
+          if [ -n "$INPUT_BOLSONARO_NAME" ]; then export BOLSONARO_URNA_NAME="$INPUT_BOLSONARO_NAME"; fi
           Rscript run_polling_schedule.R
       - name: Report each cycle as an annotation
         if: always()

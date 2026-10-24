@@ -211,7 +211,8 @@ def main():
         uf_snap = snap.assign(uf=snap.uf.str.upper()).groupby("uf")[
             ["votos_lula_2026", "votos_bolsonaro_2026", "votos_validos_total_2026"]].sum()
         uf_snap.columns = ["pt", "pl", "valid"]
-        uf = uf_pend.add(uf_snap.reindex(uf_pend.index).fillna(0), fill_value=0)
+        # Union of both: a fully counted UF has no pending seções but must stay in the table.
+        uf = uf_pend.add(uf_snap, fill_value=0)
         out["by_uf"] = {u: {"pt_pct": 100 * r.pt / r.valid, "pl_pct": 100 * r.pl / r.valid,
                             "counted_pct": 100 * uf_snap.valid.get(u, 0) / r.valid}
                         for u, r in uf.iterrows() if r.valid > 0}

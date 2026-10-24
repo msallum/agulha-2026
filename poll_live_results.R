@@ -324,8 +324,8 @@ t_parse_start <- Sys.time()
 #    string TSE uses should be verified the same way "JAIR BOLSONARO"/
 #    "LULA" were verified for 2018/2022 -- see build_historical_baseline.R).
 # ---------------------------------------------------------------------
-LULA_URNA_NAME <- "LULA"
-BOLSONARO_URNA_NAME <- "FLAVIO BOLSONARO"  # PLACEHOLDER -- confirm on real data
+LULA_URNA_NAME <- Sys.getenv("LULA_URNA_NAME", "LULA")  # override for TSE rehearsals, whose candidates are fictional
+BOLSONARO_URNA_NAME <- Sys.getenv("BOLSONARO_URNA_NAME", "FLAVIO BOLSONARO")  # confirmed on the 2026 1st round
 # NOTE (2026-09-27): the simulado's own candidates are placeholders too --
 # literally named "CANDIDATO 9995".."CANDIDATO 9981" nationally (a fixed
 # fictional roster, confirmed identical across 6 municípios sampled from
