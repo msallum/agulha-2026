@@ -3,3 +3,4 @@ updated_at,status,pct_eleitorado,votos_identificados_pct,modo,ufs_lista_ok,ufs_l
 2026-10-25T22:04:58.049Z,preliminar,0.549,85.0,identificadas,25,RJ: sem seções listadas; SE: sem seções listadas; SP: sem seções listadas,,,,,,,8.1484,4.4107,0.9676
 2026-10-25T22:09:57.712Z,preliminar,0.825,51.0,ordem do 1º turno,23,"PA: lista 450 seções, TSE conta 9; RJ: sem seções listadas; RO: lista 88 seções, TSE conta 0; SC: lista 116 seções, TSE conta 35; SE: sem seções listadas",,,,,,,7.3086,4.2161,0.9585
 2026-10-25T22:14:48.924Z,preliminar,1.841,93.3,identificadas,26,RO: falha ao baixar (HTTP Error 429: Too Many Requests); SE: sem seções listadas,,,,,,,6.9194,2.8539,0.9922
+2026-10-25T22:30:25.532Z,ok,4.629,97.5,identificadas,27,SE: sem seções listadas,52.03700349466804,47.96299650533194,4.0740069893361035,1.052726775059435,0.999999999903039,1118,5.4667,2.6234,0.9814
