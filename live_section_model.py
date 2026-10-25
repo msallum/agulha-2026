@@ -25,6 +25,7 @@ instead of TSE, for tests).
 import json
 import os
 import sys
+import time
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from math import erf, sqrt
@@ -48,13 +49,26 @@ LOG = os.environ.get("SECTION_LOG", "section_model_log.csv")
 MIN_ELECTORATE_PCT = 2.0  # no projection until this share of the electorate is in counted seções (as projecao.2026)
 
 
+FETCH_FAILED = {}  # UF -> error, for UFs whose cs.json could not be downloaded this cycle
+
+
 def phi(z):
     return 0.5 * (1 + erf(z / sqrt(2)))
 
 
-def get_json(url, timeout=60):
-    with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "agulha-2026"}), timeout=timeout) as r:
-        return json.load(r)
+def get_json(url, timeout=60, retries=4, backoff=8):
+    # TSE rate-limits (HTTP 429) for a while after poll_live_results.R's burst of ~5,600 requests; on the 25 Oct runoff
+    # every UF's cs.json failed this way without retries.
+    for attempt in range(retries + 1):
+        try:
+            with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "agulha-2026"}),
+                                        timeout=timeout) as r:
+                return json.load(r)
+        except Exception as e:
+            code = getattr(e, "code", None)
+            if attempt == retries or (code is not None and code not in (429, 500, 502, 503, 504)):
+                raise
+            time.sleep(backoff * (attempt + 1))
 
 
 def find_pleito(base_url, election_code):
@@ -75,10 +89,11 @@ def counted_sections(base_url, cycle, pleito, ufs):
             return uf, get_json(f"{base_url}/{cycle}/arquivo-urna/{pleito}/config/{uf.lower()}/{name}")
         except Exception as e:  # a missing UF just falls back to proportional reconciliation
             print(f"cs.json {uf}: {e}", file=sys.stderr)
+            FETCH_FAILED[uf.upper()] = str(e)[:60]
             return uf, None
 
     out = {}
-    with ThreadPoolExecutor(8) as ex:
+    with ThreadPoolExecutor(4) as ex:
         for uf, cs in ex.map(one, ufs):
             if not cs:
                 continue
@@ -103,7 +118,9 @@ def uf_usable(uf, listed, t, k):
         tt = g.t[g.listed]
         span = (tt.max() - tt.min()).total_seconds() if c else 0.0
         reason = None
-        if c == 0:
+        if u in FETCH_FAILED:
+            reason = f"falha ao baixar ({FETCH_FAILED[u]})"
+        elif c == 0:
             reason = "sem seções listadas"
         elif c >= 100 and span < 120:
             reason = f"horários agrupados ({span:.0f}s para {c} seções)"
