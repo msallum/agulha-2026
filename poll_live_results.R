@@ -407,6 +407,21 @@ live_new <- if (nrow(to_fetch) > 0) {
 }
 cat("Parsed", nrow(live_new), "of", nrow(to_fetch), "freshly-fetched municipalities.\n")
 
+# LAST-SEEN FALLBACK (added 2026-10-26, after the runoff): each cycle is a
+# fresh Rscript process with an empty SCRATCH, so a município whose file
+# was 429'd this cycle used to drop out of the count entirely -- on the
+# runoff night the national count went backwards three times (e.g. 55% ->
+# 35%). Its last successfully parsed result is kept on disk and reused
+# until a fresh fetch succeeds.
+LAST_SEEN_PATH <- file.path(OUT_DIR, paste0("last_seen_municipios_", CACHE_KEY, ".rds"))
+last_seen <- if (file.exists(LAST_SEEN_PATH)) readRDS(LAST_SEEN_PATH) else empty_completed
+stale <- last_seen %>% filter(codigo_tse %in% to_fetch$codigo_tse, !codigo_tse %in% live_new$codigo_tse)
+if (nrow(stale) > 0) {
+  cat("Reusing the previous cycle's result for", nrow(stale), "município(s) whose fetch failed this cycle.\n")
+  live_new <- bind_rows(live_new, stale)
+}
+saveRDS(live_new, LAST_SEEN_PATH)
+
 # Move any newly-100%-complete município into the on-disk cache so the
 # NEXT run skips it; anything still short of 100% stays "live" (fetched
 # fresh again next run). `live` is the full national picture for THIS
